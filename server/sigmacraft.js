@@ -23,6 +23,7 @@ function ensureState(world) {
   if (!Array.isArray(s.pendingIntents)) s.pendingIntents = [];
   if (!Array.isArray(s.recentEvents)) s.recentEvents = [];
   if (!s.actorPlaces || typeof s.actorPlaces !== "object") s.actorPlaces = {};
+  if (!s.vcsAccounts || typeof s.vcsAccounts !== "object") s.vcsAccounts = {};
   return s;
 }
 

@@ -41,6 +41,9 @@ export function createSigmacraftState() {
     recentEvents: [],
     actorPlaces: {},
     objective: { ...DEFAULT_SIGMACRAFT_OBJECTIVE },
+    // VCS account POINTERS only (token -> {vcsAccountId, snapshotVersion,
+    // twitchLogin, identitySource, verified}). Never durable account state.
+    vcsAccounts: {},
   };
 }
 

@@ -107,7 +107,7 @@ net.connect({
     feed = (msg.feed || []).slice(0, FEED_MAX);
     ui.setFeed(feed);
     ui.setStats(msg.players, msg.leaderboard);
-    ui.setSigmacraft?.(msg.sigmacraftSnapshot);
+    ui.setSigmacraft?.(msg.sigmacraftSnapshot, msg.vcsAccount);
 
     if (!booted) {
       booted = true;

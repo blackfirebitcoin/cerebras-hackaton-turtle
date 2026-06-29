@@ -17,6 +17,7 @@ import {
   WS_RATE,
 } from "../shared/constants.js";
 import { projectSigmacraftSnapshot } from "../shared/sigmacraft.js";
+import { vcsAccountForToken } from "./vcs-bridge.js";
 import * as arena from "./arena.js";
 import * as drops from "./drops.js";
 import * as store from "./store.js";
@@ -154,9 +155,17 @@ export function attachRealtime(httpServer, { getRaid } = {}) {
             if (parsed.data.twitch) store.linkTwitch(parsed.data.twitch, token);
           }
           ws.token = token;
+          // VCS account pointer (integrate-this PR3). Identity is the verified
+          // Twitch login — from this hello's claim, or the server-side link
+          // table on a tokened reconnect that omits the claim. The account id is
+          // derived server-side, never client-asserted. Tokens with no (or an
+          // ambiguous) link resolve to a null/unverified pointer and write nothing.
+          const vcsAccount = vcsAccountForToken(store, token, parsed.data.twitch);
+          if (vcsAccount.verified) store.upsertVcsAccount(token, vcsAccount);
           send(ws, {
             t: "welcome",
             token,
+            vcsAccount,
             character: rec ? rec.character : null,
             feed: store.getFeed(),
             leaderboard: leaderboard(),

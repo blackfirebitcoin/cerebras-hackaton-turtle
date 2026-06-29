@@ -141,6 +141,47 @@ export function putWorldState(w) {
   worldDirty = true;
 }
 
+// VCS account POINTERS (integrate-this PR3) live in the world.sigmacraft
+// namespace, keyed by anon token — pointers only, never durable account state.
+export function getVcsAccount(token) {
+  return world?.sigmacraft?.vcsAccounts?.[token] || null;
+}
+
+// Upsert a resolved pointer. The store stays "dumb" (no validate/vcs-bridge
+// import) — the caller passes the derived pointer. Churn guard: an unchanged
+// pointer does NOT raise worldDirty, so a linked viewer reconnecting every few
+// seconds never rewrites world.json.
+export function upsertVcsAccount(token, pointer) {
+  if (!world || !token || !pointer) return null;
+  if (!world.sigmacraft || typeof world.sigmacraft !== "object") world.sigmacraft = {};
+  if (!world.sigmacraft.vcsAccounts || typeof world.sigmacraft.vcsAccounts !== "object") {
+    world.sigmacraft.vcsAccounts = {};
+  }
+  const prev = world.sigmacraft.vcsAccounts[token] || null;
+  const next = {
+    vcsAccountId: pointer.vcsAccountId,
+    snapshotVersion: Number.isInteger(pointer.snapshotVersion)
+      ? pointer.snapshotVersion
+      : prev?.snapshotVersion || 0,
+    twitchLogin: pointer.twitchLogin || null,
+    identitySource: pointer.identitySource || "anonymous",
+    verified: pointer.verified === true,
+  };
+  if (
+    prev &&
+    prev.vcsAccountId === next.vcsAccountId &&
+    prev.snapshotVersion === next.snapshotVersion &&
+    prev.twitchLogin === next.twitchLogin &&
+    prev.identitySource === next.identitySource &&
+    prev.verified === next.verified
+  ) {
+    return prev; // unchanged — no world.json rewrite
+  }
+  world.sigmacraft.vcsAccounts[token] = next;
+  worldDirty = true;
+  return next;
+}
+
 // Cheap fire-and-forget zone signal (a kill, a death) that the world tick
 // drains and folds into zone pressure. Bounded so a flood can't grow it.
 const ZONE_EVENTS_MAX = 2000;
