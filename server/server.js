@@ -436,7 +436,10 @@ app.get(
     const qs = (req.url || "").split("?")[1] || "";
     const token = String(new URLSearchParams(qs).get("token") || "").slice(0, 64);
     const character = token ? store.getPlayer(token)?.character || null : null;
-    res.json({ ok: true, snapshot: projectSigmacraftSnapshot(store.getWorldState(), character) });
+    res.json({
+      ok: true,
+      snapshot: projectSigmacraftSnapshot(store.getWorldState(), character, { token }),
+    });
   }),
 );
 // Sigmacraft intent write path (integrate-this PR5). A token-owning player
@@ -472,6 +475,26 @@ app.post(
     res.status(result.status === "rejected" ? 409 : 200).json({
       ok: result.status !== "rejected",
       ...result,
+    });
+  }),
+);
+// Playtest bootstrap: mint a fresh, roam-ready sigma server-side (no untrusted
+// input — uses the canonical freshCharacter) and return its token + the initial
+// Sigmacraft snapshot. Powers the /sigmacraft test interface end-to-end through
+// the real intent/snapshot path.
+app.post(
+  "/api/sigmacraft/playtest",
+  guard("POST /api/sigmacraft/playtest", (_req, res) => {
+    const token = `sig_${crypto.randomBytes(12).toString("hex")}`;
+    const seed = crypto.randomBytes(4).readUInt32BE(0) >>> 0 || 1;
+    const character = freshCharacter(seed, "Playtester");
+    character.highestLevel = 60; // unlock every zone (max minLevel is 50) for free roam
+    character.lastSeen = Date.now();
+    store.putPlayer(token, character);
+    res.json({
+      ok: true,
+      token,
+      snapshot: projectSigmacraftSnapshot(store.getWorldState(), character, { token }),
     });
   }),
 );
@@ -3048,6 +3071,16 @@ app.get(
   "/overlay/panel",
   guard("GET /overlay/panel", (_req, res) => {
     res.sendFile(path.join(ROOT, "client", "overlay-panel.html"));
+  }),
+);
+
+// Sigmacraft playtest interface — world map + interaction actions + a 2D
+// side-scrolling zone pane. A standalone test surface for the Sigmacraft layer;
+// drives the real welcome/intent/snapshot path (integrate-this).
+app.get(
+  "/sigmacraft",
+  guard("GET /sigmacraft", (_req, res) => {
+    res.sendFile(path.join(ROOT, "client", "sigmacraft-playtest.html"));
   }),
 );
 

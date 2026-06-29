@@ -178,6 +178,7 @@ export function attachRealtime(httpServer, { getRaid } = {}) {
             sigmacraftSnapshot: projectSigmacraftSnapshot(
               store.getWorldState(),
               rec ? rec.character : null,
+              { token },
             ),
           });
           return;

@@ -57,6 +57,32 @@ describe("Sigmacraft state + projection", () => {
     assert.deepEqual(snap.validActions, []);
     assert.equal(snap.place.id, TOWN_ID);
   });
+
+  test("snapshot includes the world-map zones with a current flag", () => {
+    const w = freshWorld();
+    const snap = projectSigmacraftSnapshot(w, null, { token: "sig_z" });
+    assert.ok(snap.zones.length >= 6, "all zones projected for the map");
+    const current = snap.zones.filter((z) => z.current);
+    assert.equal(current.length, 1);
+    assert.equal(current[0].id, TOWN_ID);
+  });
+
+  test("an explicit token keys the current place to actorPlaces", () => {
+    const w = freshWorld();
+    const targetId = Object.keys(ZONE_BY_ID).find((id) => id !== TOWN_ID);
+    w.sigmacraft.actorPlaces.sig_z = targetId;
+    const snap = projectSigmacraftSnapshot(w, null, { token: "sig_z" });
+    assert.equal(snap.place.id, targetId, "place follows the token's tracked zone");
+  });
+
+  test("occupants surface existing NPCs standing in the current zone", () => {
+    const w = freshWorld();
+    // freshWorld seeds NPCs at their home zones; find one and stand there.
+    const npc = Object.values(w.npcs)[0];
+    w.sigmacraft.actorPlaces.sig_z = npc.zoneId;
+    const snap = projectSigmacraftSnapshot(w, null, { token: "sig_z" });
+    assert.ok(snap.occupants.some((o) => o.kind === "npc" && o.id === npc.id), "NPC in zone is an occupant");
+  });
 });
 
 describe("Sigmacraft advancer", () => {

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>World of Sigmacraft — Playtest</title>
+<style>
+  :root {
+    --bg-0: #0a0d0c; --bg-1: #131a17; --bg-2: #1d2723; --line: rgba(200,215,205,.14);
+    --text: #ecf2ed; --muted: #9fb0a6; --amber: #d8a657; --teal: #7fc4a5;
+    --danger: #d77474; --shadow: 0 18px 44px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(1200px 700px at 70% -10%, #1a2420, var(--bg-0) 70%);
+    color: var(--text); font: 14px/1.5 system-ui, -apple-system, sans-serif; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); background: rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .06em; color: var(--amber); }
+  header .meta { color: var(--muted); font-size: 12px; }
+  header .who { margin-left: auto; color: var(--teal); font-size: 12px; }
+  #app { display: grid; grid-template-columns: 320px 1fr 300px; gap: 12px; padding: 12px; height: calc(100% - 49px); }
+  .panel {
+    background: linear-gradient(180deg, var(--bg-2), var(--bg-1)); border: 1px solid var(--line);
+    border-radius: 14px; box-shadow: var(--shadow); padding: 12px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .panel h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--amber); }
+  /* world map */
+  #map-wrap { flex: 1; min-height: 0; }
+  #map { width: 100%; height: 100%; }
+  .zone-node { cursor: default; }
+  .zone-node.reachable { cursor: pointer; }
+  .zone-node.reachable:hover circle { stroke: var(--teal); stroke-width: 3; }
+  .zone-label { fill: var(--text); font: 11px system-ui; text-anchor: middle; }
+  .zone-sub { fill: var(--muted); font: 9px system-ui; text-anchor: middle; }
+  /* scene */
+  .scene-panel { padding: 0; }
+  #scene { display: block; width: 100%; height: 100%; border-radius: 14px; }
+  .scene-cap {
+    position: absolute; left: 22px; top: 64px; max-width: 50%;
+    text-shadow: 0 2px 8px #000; pointer-events: none;
+  }
+  .scene-cap .place { font-size: 22px; font-weight: 700; }
+  .scene-cap .flavor { color: #d7e2da; font-size: 12px; margin-top: 4px; }
+  .scene-cap .tierbadge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 999px; margin-top: 6px; }
+  /* actions */
+  .actions { display: flex; flex-direction: column; gap: 7px; }
+  button.act {
+    text-align: left; padding: 9px 11px; border-radius: 9px; cursor: pointer;
+    background: rgba(127,196,165,.10); color: var(--text); border: 1px solid var(--line); font: inherit;
+    transition: background .12s, border-color .12s;
+  }
+  button.act:hover { background: rgba(127,196,165,.22); border-color: var(--teal); }
+  button.act.rest { background: rgba(216,166,87,.10); }
+  button.act.talk { background: rgba(150,150,220,.12); }
+  button.act:disabled { opacity: .45; cursor: default; }
+  .pending { color: var(--amber); font-size: 12px; min-height: 18px; }
+  .obj { font-size: 12px; color: #e7d9b8; border-left: 2px solid var(--amber); padding-left: 8px; margin: 4px 0 10px; }
+  .occ { color: var(--muted); font-size: 11px; margin: 8px 0; }
+  .occ b { color: var(--teal); }
+  #events { list-style: none; margin: 8px 0 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
+  #events li { padding: 5px 0; border-top: 1px solid var(--line); color: #cdd8d0; font-size: 12px; }
+  #events li .t { color: var(--muted); font-size: 10px; margin-right: 6px; }
+  .dim { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>WORLD OF SIGMACRAFT</h1>
+  <span class="meta" id="hdr-meta">connecting…</span>
+  <span class="who" id="hdr-who"></span>
+</header>
+<div id="app">
+  <section class="panel">
+    <h2>Realm Map</h2>
+    <div id="map-wrap"><svg id="map" viewBox="0 0 600 380" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </section>
+
+  <section class="panel scene-panel" style="position:relative">
+    <canvas id="scene"></canvas>
+    <div class="scene-cap">
+      <div class="place" id="scene-place">—</div>
+      <div class="flavor" id="scene-flavor"></div>
+      <div class="tierbadge" id="scene-tier"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Objective</h2>
+    <div class="obj" id="objective">—</div>
+    <h2>Actions</h2>
+    <div class="pending" id="pending"></div>
+    <div class="actions" id="actions"></div>
+    <div class="occ" id="occupants"></div>
+    <h2 style="margin-top:10px">Recent Events</h2>
+    <ul id="events"><li class="dim">the realm stirs…</li></ul>
+  </section>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+let token = null;
+let snap = null;
+const nonce = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random())).slice(0, 24);
+
+// ── bootstrap a playtest sigma, then poll the snapshot ──────────────────────
+async function boot() {
+  try {
+    const r = await fetch("/api/sigmacraft/playtest", { method: "POST" });
+    const j = await r.json();
+    token = j.token;
+    snap = j.snapshot;
+    $("hdr-who").textContent = `playtest · ${token.slice(-6)}`;
+    render();
+    setInterval(refresh, 1500);
+  } catch (e) {
+    $("hdr-meta").textContent = "failed to reach the realm";
+  }
+}
+async function refresh() {
+  if (!token) return;
+  try {
+    const r = await fetch(`/api/sigmacraft/snapshot?token=${encodeURIComponent(token)}`);
+    const j = await r.json();
+    if (j.ok) { snap = j.snapshot; render(); }
+  } catch { /* transient */ }
+}
+async function act(intent) {
+  if (!token) return;
+  $("pending").textContent = `… ${intent.kind}${intent.targetId ? " → " + intent.targetId : ""} (resolving next tick)`;
+  try {
+    await fetch("/api/sigmacraft/intent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, intent: { ...intent, nonce: nonce() } }),
+    });
+    setTimeout(refresh, 600);
+  } catch { /* ignore */ }
+}
+
+// ── tier → palette for the side-scroller + map ──────────────────────────────
+const TIER = [
+  { sky: ["#3a2f22", "#15110b"], hill: "#241c12", ground: "#1a140c", glow: "#d8a657" }, // 0 town
+  { sky: ["#1f3326", "#0c150f"], hill: "#16271b", ground: "#0f1c13", glow: "#7fc4a5" }, // 1
+  { sky: ["#16241f", "#0a120e"], hill: "#10201a", ground: "#0b1611", glow: "#5fae93" }, // 2
+  { sky: ["#3a1d14", "#160a07"], hill: "#2a120b", ground: "#1d0c07", glow: "#e07a4a" }, // 3
+  { sky: ["#241733", "#0d0916"], hill: "#1b1129", ground: "#120a1d", glow: "#9a7fd0" }, // 4
+  { sky: ["#10172a", "#050811"], hill: "#0b1020", ground: "#070a15", glow: "#6f9fd8" }, // 5
+];
+const pal = () => TIER[Math.min(TIER.length - 1, Math.max(0, snap?.place?.tier ?? 0))];
+
+// ── world map (SVG hub) ─────────────────────────────────────────────────────
+// positions assigned by zone index: 0 = town (center), 1..5 radial.
+const MAP_POS = [
+  [300, 190], [150, 95], [455, 95], [500, 270], [300, 330], [105, 270],
+];
+function render_map() {
+  const svg = $("map");
+  const zones = snap?.zones || [];
+  let lines = "", nodes = "";
+  const [cx, cy] = MAP_POS[0];
+  zones.forEach((z, i) => {
+    if (i === 0) return;
+    const [x, y] = MAP_POS[i] || [300, 190];
+    lines += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${z.unlocked ? "rgba(127,196,165,.35)" : "rgba(160,176,166,.12)"}" stroke-width="2" ${z.unlocked ? "" : 'stroke-dasharray="4 4"'}/>`;
+  });
+  const reachableIds = new Set((snap?.validActions || []).filter(a => a.kind === "move").map(a => a.targetId));
+  zones.forEach((z, i) => {
+    const [x, y] = MAP_POS[i] || [300, 190];
+    const t = TIER[Math.min(TIER.length - 1, z.tier)] || TIER[0];
+    const fill = z.current ? t.glow : (z.unlocked ? t.hill : "#171d1a");
+    const stroke = z.current ? "#fff" : (z.unlocked ? "rgba(236,242,237,.4)" : "rgba(160,176,166,.2)");
+    const reachable = reachableIds.has(z.id);
+    nodes += `<g class="zone-node ${reachable ? "reachable" : ""}" data-zone="${z.id}" data-reach="${reachable ? 1 : 0}">
+      <circle cx="${x}" cy="${y}" r="${z.current ? 26 : 20}" fill="${fill}" stroke="${stroke}" stroke-width="${z.current ? 3 : 2}"/>
+      <text class="zone-label" x="${x}" y="${y + 40}">${z.name}</text>
+      <text class="zone-sub" x="${x}" y="${y + 53}">${z.safe ? "safe haven" : "tier " + z.tier}${z.current ? " · here" : (z.unlocked ? "" : " · locked")}</text>
+    </g>`;
+  });
+  svg.innerHTML = lines + nodes;
+  svg.querySelectorAll(".zone-node").forEach((g) => {
+    g.addEventListener("click", () => {
+      if (g.dataset.reach === "1") act({ kind: "move", targetId: g.dataset.zone });
+    });
+  });
+}
+
+// ── actions + events ────────────────────────────────────────────────────────
+function render_side() {
+  $("objective").textContent = snap?.objective?.title
+    ? `${snap.objective.title} — ${snap.objective.prompt || ""}` : "wander and witness the realm.";
+  const wrap = $("actions");
+  wrap.innerHTML = "";
+  for (const a of (snap?.validActions || [])) {
+    const b = document.createElement("button");
+    b.className = "act" + (a.kind === "rest" ? " rest" : "");
+    b.textContent = a.label || a.kind;
+    b.onclick = () => act({ kind: a.kind, targetId: a.targetId });
+    wrap.appendChild(b);
+  }
+  const occ = snap?.occupants || [];
+  if (occ.length) {
+    const talk = document.createElement("button");
+    talk.className = "act talk";
+    talk.textContent = `Talk with the locals (${occ.length})`;
+    talk.onclick = () => act({ kind: "talk" });
+    wrap.appendChild(talk);
+  }
+  $("occupants").innerHTML = occ.length
+    ? "Here: " + occ.map(o => `<b>${o.name}</b>${o.kind === "npc" && o.faction ? ` <span class="dim">(${o.faction})</span>` : ""}`).join(", ")
+    : '<span class="dim">no one else is here.</span>';
+  $("pending").textContent = snap?.pendingIntent
+    ? `… ${snap.pendingIntent.kind}${snap.pendingIntent.targetId ? " → " + snap.pendingIntent.targetId : ""} (queued)` : "";
+  const ul = $("events");
+  const evs = (snap?.recentEvents || []).slice().reverse();
+  ul.innerHTML = evs.length
+    ? evs.map(e => `<li><span class="t">t${e.tick}</span>${e.text}</li>`).join("")
+    : '<li class="dim">the realm is quiet…</li>';
+}
+
+function render() {
+  $("hdr-meta").textContent = `realm ${snap?.realmId || "—"} · tick ${snap?.worldTick ?? 0}`;
+  $("scene-place").textContent = snap?.place?.name || "the wilds";
+  $("scene-flavor").textContent = snap?.place?.flavor || "";
+  const tb = $("scene-tier");
+  tb.textContent = snap?.place?.safe ? "SAFE HAVEN" : `DANGER · TIER ${snap?.place?.tier ?? 0}`;
+  tb.style.background = snap?.place?.safe ? "rgba(127,196,165,.2)" : "rgba(215,116,116,.2)";
+  tb.style.color = snap?.place?.safe ? "var(--teal)" : "var(--danger)";
+  render_map();
+  render_side();
+}
+
+// ── 2D side-scrolling scene ─────────────────────────────────────────────────
+const cv = $("scene");
+const ctx = cv.getContext("2d");
+let scrollX = 0;
+function fit() {
+  const r = cv.parentElement.getBoundingClientRect();
+  cv.width = Math.max(320, r.width); cv.height = Math.max(240, r.height);
+}
+new ResizeObserver(fit).observe(cv.parentElement);
+fit();
+
+function figure(x, groundY, color, label, scale = 1) {
+  const h = 46 * scale;
+  ctx.save();
+  ctx.translate(x, groundY);
+  // cloak body
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-9 * scale, 0); ctx.lineTo(9 * scale, 0);
+  ctx.lineTo(6 * scale, -h * 0.7); ctx.lineTo(-6 * scale, -h * 0.7); ctx.closePath(); ctx.fill();
+  // head
+  ctx.beginPath(); ctx.arc(0, -h * 0.82, 6 * scale, 0, 7); ctx.fill();
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath(); ctx.ellipse(0, 3, 12 * scale, 3.5 * scale, 0, 0, 7); ctx.fill();
+  if (label) {
+    ctx.fillStyle = "rgba(236,242,237,.85)"; ctx.font = "11px system-ui"; ctx.textAlign = "center";
+    ctx.fillText(label, 0, -h - 6);
+  }
+  ctx.restore();
+}
+
+let last = 0;
+function frame(ts) {
+  const dt = Math.min(40, ts - last); last = ts;
+  const p = pal();
+  const W = cv.width, H = cv.height, groundY = H * 0.82;
+  const traveling = !!snap?.pendingIntent;
+  scrollX += (traveling ? 0.10 : 0.025) * dt * 6;
+
+  // sky
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, p.sky[0]); g.addColorStop(1, p.sky[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // glow orb (sun/abyss light)
+  ctx.save(); ctx.globalAlpha = .5;
+  const rg = ctx.createRadialGradient(W * 0.74, H * 0.26, 8, W * 0.74, H * 0.26, 160);
+  rg.addColorStop(0, p.glow); rg.addColorStop(1, "transparent");
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H); ctx.restore();
+
+  // far parallax hills
+  for (let layer = 0; layer < 3; layer++) {
+    const off = (scrollX * (0.15 + layer * 0.22)) % (W + 240);
+    const baseY = groundY - 30 - layer * 26;
+    ctx.fillStyle = layer === 2 ? p.ground : p.hill;
+    ctx.globalAlpha = 0.55 + layer * 0.2;
+    for (let bx = -240; bx < W + 240; bx += 240) {
+      const x = bx - off;
+      ctx.beginPath();
+      ctx.moveTo(x, H);
+      ctx.lineTo(x, baseY);
+      ctx.quadraticCurveTo(x + 60, baseY - 46 - layer * 8, x + 120, baseY);
+      ctx.quadraticCurveTo(x + 180, baseY + 30, x + 240, baseY);
+      ctx.lineTo(x + 240, H); ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // background enemy silhouettes (danger zones)
+  const enemies = snap?.place?.enemies || [];
+  if (!snap?.place?.safe) {
+    enemies.slice(0, 4).forEach((e, i) => {
+      const ex = (W - ((scrollX * 0.4 + i * 190) % (W + 160))) ;
+      ctx.save(); ctx.globalAlpha = .22; ctx.fillStyle = "#000";
+      figure(ex, groundY - 8, "#000", "", 0.8); ctx.restore();
+    });
+  }
+
+  // ground
+  ctx.fillStyle = p.ground; ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.lineWidth = 1;
+  for (let gx = -((scrollX) % 48); gx < W; gx += 48) {
+    ctx.beginPath(); ctx.moveTo(gx, groundY); ctx.lineTo(gx - 14, H); ctx.stroke();
+  }
+
+  // occupants (NPCs / players) spread along the ground
+  const occ = snap?.occupants || [];
+  occ.slice(0, 8).forEach((o, i) => {
+    const ox = W * 0.42 + i * 86 - ((scrollX * 0.0) % 1);
+    const bob = Math.sin(ts / 600 + i) * 2;
+    figure(ox, groundY + bob, o.kind === "npc" ? "#caa15a" : "#6f9fd8", o.name, 0.92);
+  });
+
+  // the player (cloaked wanderer), left third, idle bob
+  const pbob = Math.sin(ts / 420) * 2.5;
+  figure(W * 0.2, groundY + pbob, "#e7eee9", "You", 1.05);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+boot();
+</script>
+</body>
+</html>

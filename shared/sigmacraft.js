@@ -9,6 +9,7 @@
 // gated by the same unlockedZones() rule the delve world already uses.
 
 import { ZONES, ZONE_BY_ID, TOWN_ID, unlockedZones } from "./zones.js";
+import { NPCS } from "./npc-defs.js";
 
 export const SIGMACRAFT_SCHEMA = "sigmacraft.world.v1";
 export const SIGMACRAFT_REALM_ID = "sigmacraft_alpha";
@@ -55,15 +56,53 @@ function placeFromZone(zone) {
     tier: zone.tier ?? 0,
     safe: Boolean(zone.safe),
     flavor: zone.flavor || "",
+    enemies: Array.isArray(zone.enemies) ? zone.enemies.slice(0, 4) : [],
   };
 }
 
-// The zone an actor is currently standing in for Sigmacraft purposes. Falls back
-// to the character's live zone, then town.
-export function sigmacraftActorZoneId(sigmacraft, character) {
-  const token = character?.token || character?.id || null;
-  const tracked = token ? sigmacraft?.actorPlaces?.[token] : null;
+// The zone an actor is currently standing in for Sigmacraft purposes. An explicit
+// viewer token (the WS/intent token) wins, then the character's tracked place,
+// then the character's live zone, then town.
+export function sigmacraftActorZoneId(sigmacraft, character, token = null) {
+  const key = token || character?.token || character?.id || null;
+  const tracked = key ? sigmacraft?.actorPlaces?.[key] : null;
   return tracked || character?.zoneId || character?.zone || TOWN_ID;
+}
+
+// World-map read model: every zone with reachability for the current actor.
+function projectZones(character, currentZoneId) {
+  const unlocked = new Set([TOWN_ID, ...unlockedZones(character).map((z) => z.id)]);
+  return ZONES.map((zone) => ({
+    id: zone.id,
+    name: zone.name,
+    tier: zone.tier ?? 0,
+    safe: Boolean(zone.safe),
+    current: zone.id === currentZoneId,
+    unlocked: character ? unlocked.has(zone.id) : false,
+  }));
+}
+
+// Who else is in the actor's current zone — existing NPCs (no parallel world) and
+// other player actors — for the side-scrolling scene. Bounded.
+function projectOccupants(world, sigmacraft, currentZoneId, selfToken) {
+  const out = [];
+  for (const npc of Object.values(world?.npcs || {})) {
+    if (npc.zoneId !== currentZoneId) continue;
+    out.push({
+      id: npc.id,
+      kind: "npc",
+      name: NPCS[npc.id]?.name || npc.id,
+      faction: npc.factionId || null,
+      mood: Number.isFinite(npc.moodValue) ? npc.moodValue : 50,
+    });
+    if (out.length >= 16) break;
+  }
+  for (const [tok, zid] of Object.entries(sigmacraft?.actorPlaces || {})) {
+    if (zid !== currentZoneId || tok === selfToken) continue;
+    out.push({ id: tok.slice(-4), kind: "player", name: `Wanderer ${tok.slice(-4)}` });
+    if (out.length >= 24) break;
+  }
+  return out;
 }
 
 // Bounded list of valid actions from the actor's current place. Movement targets
@@ -81,10 +120,10 @@ export function sigmacraftValidActions(character, currentZoneId) {
 
 // Cheap read model for browser/agent/CLI consumers. Pure projection — never
 // mutates. `character` may be null (anonymous/observer).
-export function projectSigmacraftSnapshot(world, character = null) {
+export function projectSigmacraftSnapshot(world, character = null, opts = {}) {
   const sigmacraft = world?.sigmacraft || createSigmacraftState();
-  const token = character?.token || character?.id || null;
-  const currentZoneId = sigmacraftActorZoneId(sigmacraft, character);
+  const token = opts.token || character?.token || character?.id || null;
+  const currentZoneId = sigmacraftActorZoneId(sigmacraft, character, token);
   const place = placeFromZone(ZONE_BY_ID[currentZoneId] || ZONE_BY_ID[TOWN_ID]);
   const pending = Array.isArray(sigmacraft.pendingIntents)
     ? sigmacraft.pendingIntents.find((intent) => intent.token === token) || null
@@ -95,6 +134,8 @@ export function projectSigmacraftSnapshot(world, character = null) {
     worldTick: sigmacraft.tick || 0,
     actorId: token,
     place,
+    zones: projectZones(character, currentZoneId),
+    occupants: projectOccupants(world, sigmacraft, currentZoneId, token),
     objective: sigmacraft.objective || null,
     validActions: character ? sigmacraftValidActions(character, currentZoneId) : [],
     pendingIntent: pending ? { kind: pending.kind, targetId: pending.targetId || null } : null,
