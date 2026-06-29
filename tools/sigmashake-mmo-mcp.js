@@ -126,6 +126,31 @@ const TOOLS = [
     },
   },
   {
+    name: "mmo_sigmacraft",
+    description:
+      "Sigmacraft overworld snapshot — GET /api/sigmacraft/snapshot. Returns the read-only " +
+      "fantasy-realm projection: the observer's current tile (place), the windowed worldMap " +
+      "neighborhood with per-tile npc counts and exits, occupants, valid actions, and recent " +
+      "events. Pass `token` to view as a specific player/agent; omit it to stand in the town tile.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: {
+          type: "string",
+          description: "Optional player/agent token to view the overworld from that actor's tile.",
+        },
+      },
+    },
+  },
+  {
+    name: "mmo_sigmacraft_map",
+    description:
+      "Sigmacraft static tile graph — GET /api/sigmacraft/map. Returns the whole deterministic " +
+      "overworld map (140 typed tiles: town/city/dungeon/wilds/road/ruins/shrine, each with exits). " +
+      "The map never mutates, so fetch it once; live per-tile populations come from mmo_sigmacraft.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "oracle_ask",
     description:
       "Offload an inference question to the Oracle Bazaar and return the crowd-sourced answer. " +
@@ -316,6 +341,18 @@ async function callTool(name, args) {
       const login = argString(args, "login");
       if (!login) return failResult("Missing required argument: login");
       const result = await apiFetch(`/api/sigma/${encodeURIComponent(login)}/weapons`);
+      return okResult(result);
+    }
+
+    case "mmo_sigmacraft": {
+      const token = argString(args, "token");
+      const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+      const result = await apiFetch(`/api/sigmacraft/snapshot${qs}`);
+      return okResult(result);
+    }
+
+    case "mmo_sigmacraft_map": {
+      const result = await apiFetch("/api/sigmacraft/map");
       return okResult(result);
     }
 
