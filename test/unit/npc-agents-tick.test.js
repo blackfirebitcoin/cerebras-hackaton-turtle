@@ -1,4 +1,8 @@
 // SIGMA ABYSS — NPC plan consumption by the world tick (PR7, overworld + batch).
+// advance() applies NPC ambient effects IN-MEMORY but returns false for them: NPC
+// churn is regenerable from seed and must not raise the world.json persist signal
+// (idle quiescence — see server/sigmacraft.js advance()). Only player intents
+// return true. These tests assert BOTH the in-memory effect and the false signal.
 // Run: node --test test/unit/npc-agents-tick.test.js
 
 import assert from "node:assert/strict";
@@ -27,15 +31,16 @@ describe("advance() consumes overworld NPC plans, bounded", () => {
     assert.equal(w.sigmacraft.tick, 0);
   });
 
-  test("a tile-move plan moves the overworld NPC once, then idle", () => {
+  test("a tile-move plan moves the overworld NPC once (in-memory) but does NOT dirty the world", () => {
     const w = freshWorld();
     const id = npcIds(w)[0];
     const from = w.sigmacraft.overworldNpcs[id].tileId;
     const dest = w.sigmacraft.map.tiles[from].exits[0];
     planFor(w, id, { kind: "move", targetId: dest });
     const store = feedStore();
-    assert.equal(advance({ world: w, store }), true);
-    assert.equal(w.sigmacraft.overworldNpcs[id].tileId, dest, "npc moved to the planned tile");
+    // NPC ambient churn applies in-memory but is not a persist signal → false.
+    assert.equal(advance({ world: w, store }), false, "npc-only tick is not dirty");
+    assert.equal(w.sigmacraft.overworldNpcs[id].tileId, dest, "npc still moved to the planned tile");
     assert.equal(w.sigmacraft.npcAgents[id].plan.consumed, true);
     assert.equal(advance({ world: w, store }), false, "no work left → idle");
   });
@@ -59,9 +64,9 @@ describe("advance() consumes overworld NPC plans, bounded", () => {
     advance({ world: w, store });
     const consumed = ids.filter((id) => w.sigmacraft.npcAgents[id].plan.consumed).length;
     assert.equal(consumed, MAX_NPC_EFFECTS_PER_TICK, "exactly the cap consumed in one tick");
-    // the rest drain over subsequent ticks
-    let ticks = 1;
-    while (advance({ world: w, store }) && ticks < 10) ticks += 1;
+    // The rest drain over subsequent ticks. advance() returns false throughout
+    // (NPC-only), so drive a fixed number of ticks rather than looping on dirty.
+    for (let t = 0; t < 4; t++) assert.equal(advance({ world: w, store }), false, "npc drain is not dirty");
     assert.equal(ids.every((id) => w.sigmacraft.npcAgents[id].plan.consumed), true);
   });
 
@@ -73,7 +78,7 @@ describe("advance() consumes overworld NPC plans, bounded", () => {
       (t) => t !== from && !w.sigmacraft.map.tiles[from].exits.includes(t),
     );
     planFor(w, id, { kind: "move", targetId: far });
-    assert.equal(advance({ world: w, store: feedStore() }), true);
+    assert.equal(advance({ world: w, store: feedStore() }), false, "npc-only tick is not dirty");
     assert.equal(w.sigmacraft.overworldNpcs[id].tileId, from, "no teleport for a non-adjacent tile");
     assert.equal(w.sigmacraft.npcAgents[id].plan.consumed, true, "still consumed (no retry loop)");
   });

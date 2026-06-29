@@ -80,16 +80,19 @@ export function enqueueSigmacraftIntent(world, token, intent) {
   return { status: "queued", resolvesAfterWorldTick: (sigmacraft.tick || 0) + 1 };
 }
 
-// FAST sub-advancer: (ctx) => boolean. Returns true IFF it mutated world state,
-// so the tick loop only persists on real changes. On an idle world it bumps
-// nothing and writes nothing — avoiding ~20x world.json write amplification at
-// the 3s base cadence (integrate-this §"three-second tick budget").
+// FAST sub-advancer: (ctx) => boolean. The boolean is the PERSIST signal: true
+// IFF this tick produced a player-driven, durable mutation that must reach
+// world.json. NPC ambient churn (planner output + overworldNpcs movement) is
+// deterministically regenerable from seed, so it advances the in-memory world for
+// live viewers but NEVER raises the dirty flag. Otherwise a player-less server —
+// where the 15s planner keeps manufacturing fresh plans — would rewrite world.json
+// every ~3s forever instead of reaching a quiescent steady state (write
+// amplification / PSU power safety; integrate-this §"three-second tick budget").
 export function advance(ctx) {
   const world = ctx?.world;
   if (!world) return false;
   const sigmacraft = world.sigmacraft;
-  // Idle fast path: no pending player intents AND no unconsumed NPC plan → no
-  // mutation, no dirty flag (avoids ~20x world.json write amplification).
+  // Idle fast path: nothing pending and no NPC plan to surface → no work at all.
   const hasPending = Array.isArray(sigmacraft?.pendingIntents) && sigmacraft.pendingIntents.length > 0;
   if (!sigmacraft || (!hasPending && !hasUnconsumedNpcPlan(sigmacraft))) {
     return false;
@@ -97,6 +100,8 @@ export function advance(ctx) {
   ensureState(world);
   sigmacraft.tick = (sigmacraft.tick || 0) + 1;
   const tick = sigmacraft.tick;
+  // Only player-driven mutations make the world dirty; NPC ambient effects don't.
+  let dirty = false;
 
   // Mirror each resolved event into the existing capped feed.json (Captain's
   // Log path) as well as the in-world ring buffer (integrate-this step 10).
@@ -107,6 +112,9 @@ export function advance(ctx) {
 
   const tiles = sigmacraft.map?.tiles || {};
   const batch = sigmacraft.pendingIntents.splice(0, MAX_SIGMACRAFT_TICK_INTENTS);
+  // Draining queued player intents IS a durable mutation (the splice removed them
+  // from the persisted queue; a move rewrites actorPlaces) → persist this tick.
+  if (batch.length) dirty = true;
   for (const intent of batch) {
     const token = intent.token;
     if (intent.kind === "move") {
@@ -161,5 +169,5 @@ export function advance(ctx) {
     }
     sigmacraft.npcConsumeCursor = (cursor + applyCount) % npcIds.length;
   }
-  return true;
+  return dirty;
 }

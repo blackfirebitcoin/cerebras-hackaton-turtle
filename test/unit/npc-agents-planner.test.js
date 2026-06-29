@@ -55,7 +55,10 @@ describe("off-tick scheduler", () => {
 
     assert.ok(w.sigmacraft.npcAgents[id0]?.plan, "a plan was written for the first NPC");
     assert.equal(w.sigmacraft.npcAgents[id0].plan.plannedAtTick, w.sigmacraft.tick);
-    assert.ok(store.wasDirty());
+    // Ambient NPC plans are in-memory only — the planner must NOT raise the persist
+    // signal, or an idle/player-less server would rewrite world.json every cycle
+    // (idle quiescence / write-amplification guard; see server/sigmacraft.js).
+    assert.ok(!store.wasDirty(), "planner does not persist ambient NPC churn");
     assert.equal(w.sigmacraft.overworldNpcs[id0].tileId, tileBefore, "planner does not move the NPC");
   });
 
