@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1920, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>SIGMA ABYSS — Overlay</title>
+  <link rel="stylesheet" href="/css/overlay.css" />
+</head>
+<body>
+  <div id="stage">
+    <header id="topbar">
+      <div class="brand">
+        <span class="brand-mark">SIGMA</span><span class="brand-mark mark-2">ABYSS</span>
+      </div>
+      <div class="players">
+        <span class="players-dot"></span>
+        <span id="players-count">0</span> <span class="players-label">in the abyss</span>
+      </div>
+      <div id="leaderboard" class="leaderboard"></div>
+    </header>
+
+    <main id="arena">
+      <div id="featured-card" class="featured-card empty">
+        <div class="featured-empty">
+          <span class="empty-pulse"></span>
+          waiting for chatter activity — type <span class="cmd">!fight</span> to deploy your sigma
+        </div>
+      </div>
+    </main>
+
+    <aside id="feed" class="feed"></aside>
+
+    <div id="boss-banner" class="boss-banner hidden">
+      <div class="boss-curtain"></div>
+      <div class="boss-body">
+        <div class="boss-tagline">A BOSS HAS ENTERED THE ABYSS</div>
+        <div class="boss-name" id="boss-name">Boss</div>
+        <div class="boss-reason" id="boss-reason"></div>
+        <div class="boss-cta">type <span class="cmd">!fight</span> to challenge it</div>
+      </div>
+    </div>
+
+    <div id="boss-hpbar" class="boss-hpbar hidden">
+      <div class="boss-hpbar-row">
+        <div class="boss-hpbar-name" id="boss-hpbar-name">Boss</div>
+        <div class="boss-hpbar-meta" id="boss-hpbar-meta"></div>
+      </div>
+      <div class="boss-hpbar-track">
+        <div class="boss-hpbar-fill" id="boss-hpbar-fill"></div>
+        <div class="boss-hpbar-value" id="boss-hpbar-value">0 / 0</div>
+      </div>
+    </div>
+
+    <!-- Dynamic storyteller beat — the "AI-Dungeon" narration ribbon. The
+         Abyss stirs every few minutes; chat votes its course (!vote …). The
+         live tally lives in the world panel; this ribbon is the dramatic call. -->
+    <div id="story-ribbon" class="story-ribbon hidden">
+      <div class="sr-glyph">📖</div>
+      <div class="sr-body">
+        <div class="sr-tag" id="sr-tag">THE ABYSS STIRS · CHAT DECIDES</div>
+        <div class="sr-text" id="sr-text"></div>
+        <div class="sr-vote" id="sr-vote"></div>
+      </div>
+    </div>
+
+    <!-- Navi's distress-call hologram — the new-player call-to-action. Hidden
+         until a brand-new chatter spawns a sigma (server broadcasts t:'naviCall').
+         overlay.js paints the flickering cyan figure on #nc-holo and types in the
+         dramatic, personalized line — Princess-Leia "you're our only hope" energy. -->
+    <div id="navi-call" class="navi-call hidden" aria-hidden="true">
+      <div class="nc-scrim"></div>
+      <div class="nc-cone"></div>
+      <div class="nc-stage">
+        <div class="nc-figure">
+          <canvas id="nc-holo" class="nc-holo" width="280" height="400"></canvas>
+          <div class="nc-base"></div>
+          <div class="nc-ring"></div>
+        </div>
+        <div class="nc-text">
+          <div class="nc-tag" id="nc-tag">INCOMING TRANSMISSION</div>
+          <div class="nc-from"><span class="nc-dot"></span> NAVI · broadcasting from the Abyss</div>
+          <div class="nc-line" id="nc-line"></div>
+          <div class="nc-sub" id="nc-sub"></div>
+          <div class="nc-cta" id="nc-cta"></div>
+        </div>
+      </div>
+      <div class="nc-scan"></div>
+    </div>
+
+    <!-- Navi speech toast — her onboarding-rite questions/acks (driven by
+         t:'naviSay'). A corner hologram bubble so the back-and-forth shows on
+         stream while chat answers !os / !found / !agent. -->
+    <div id="navi-say" class="navi-say hidden" aria-hidden="true">
+      <div class="ns-emblem"><span class="ns-emblem-glyph">✦</span><span class="ns-emblem-label">NAVI</span></div>
+      <div class="ns-bubble">
+        <div class="ns-text" id="ns-text"></div>
+        <div class="ns-progress" id="ns-progress"></div>
+      </div>
+    </div>
+
+    <footer id="cmdstrip" class="cmdstrip">
+      <span class="cmdstrip-brand">play in chat</span>
+      <span class="cmd">!fight</span>
+      <span class="cmd">!run</span>
+      <span class="cmd">!delve</span>
+      <span class="cmd">!loot</span>
+      <span class="cmd">!sigma</span>
+    </footer>
+
+    <div id="conn-dot" class="conn-dot offline" title="ws status"></div>
+  </div>
+
+  <script type="module" src="/js/overlay.js"></script>
+</body>
+</html>

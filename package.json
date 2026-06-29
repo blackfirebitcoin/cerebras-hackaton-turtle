@@ -1,0 +1,51 @@
+{
+  "name": "sigmashake-mmo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SIGMA ABYSS — browser-based retro auto-battler MMO (Pokemon overworld x Solo Leveling x Diablo loot)",
+  "bin": {
+    "sigmashake-mmo": "tools/sigmashake-mmo-cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "tunnel": "cloudflared tunnel --url http://localhost:7777",
+    "smoke": "node server/smoke.js",
+    "test": "node --test test/unit/*.test.js",
+    "test:unit": "node --test test/unit/*.test.js",
+    "lpc:sync": "node tools/sync-lpc-assets.js",
+    "lpc:check": "node tools/check-lpc.js",
+    "test:api": "node --test test/api/routes.test.js",
+    "test:component": "node --test test/component/server-boot.test.js",
+    "test:chaos": "node --test test/chaos/*.test.js",
+    "test:regression": "node --test test/regression/shared-contracts.test.js",
+    "test:configuration": "node --test test/configuration/server.test.js",
+    "test:load": "node --test test/load/mmo-load.test.js",
+    "test:stress": "node --test test/stress/mmo-stress.test.js",
+    "test:spike": "node --test test/spike/mmo-spike.test.js",
+    "test:soak": "node --test test/soak/mmo-soak.test.js",
+    "test:scalability": "node --test test/scalability/mmo-scalability.test.js",
+    "test:sast": "node --test test/sast/*.test.js",
+    "test:dependencies": "node --test test/dependencies/*.test.js",
+    "lint": "biome check .",
+    "fix": "biome check --write .",
+    "typecheck": "tsc -p jsconfig.json",
+    "mirror:public": "bash scripts/publish-mmo-mirror.sh",
+    "mirror:public:evidence": "bash scripts/publish-mmo-mirror.sh --write-evidence /tmp/mmo-mirror-evidence.env",
+    "test:audit": "bun test test/dependencies",
+    "test:failover": "bun test test/failover/",
+    "test:dast": "bun test test/dast/",
+    "test:pen": "bun test test/pen/"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

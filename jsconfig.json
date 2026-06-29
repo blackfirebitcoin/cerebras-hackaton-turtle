@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "resolveJsonModule": true
+  },
+  "include": ["server/**/*.js", "shared/**/*.js", "client/**/*.js", "tools/**/*.js"],
+  "exclude": ["node_modules", "vendor", "data", "bin", "dist", "public"]
+}

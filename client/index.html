@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="color-scheme" content="dark" />
+  <title>SIGMA ABYSS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Everything renders inside #stage. The canvas is the world; #ui-root
+       is the DOM HUD overlay built by ui.js; #viewer-strip is the always-on
+       instruction band (it is what an OBS browser source shows to chat). -->
+  <div id="stage">
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-root"></div>
+
+    <div id="viewer-strip" class="viewer-strip">
+      <span class="vs-brand">SIGMA ABYSS</span>
+      <span class="vs-msg" id="vs-msg">a dangerous idle MMO — your sigma is always in the abyss</span>
+      <span class="vs-url" id="vs-url"></span>
+    </div>
+
+    <div id="boot" class="boot">
+      <div class="boot-logo">SIGMA<span>ABYSS</span></div>
+      <div class="boot-tag">permadeath is real. greed gets you killed. one more run.</div>
+      <div class="boot-status" id="boot-status">waking the abyss…</div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=720, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>SIGMA ABYSS — Panel</title>
+  <link rel="stylesheet" href="/css/overlay-panel.css" />
+</head>
+<body data-panel="true">
+  <!-- Compact 720×420 in-scene panel. Reuses /js/overlay.js by matching
+       the same DOM IDs (#arena, #featured-card, #boss-banner, etc.). The
+       layout is purpose-built for the corner size — no full-screen
+       feed sidebar, no scrolling leaderboard. -->
+  <div id="stage">
+    <header id="topbar">
+      <div class="brand">
+        <span class="brand-mark">SIGMA</span><span class="brand-mark mark-2">ABYSS</span>
+      </div>
+      <div class="players">
+        <span class="players-dot"></span>
+        <span id="players-count">0</span> <span class="players-label">live</span>
+      </div>
+      <div id="leaderboard" class="leaderboard"></div>
+    </header>
+
+    <main id="arena">
+      <div id="featured-card" class="featured-card empty">
+        <div class="featured-empty">
+          <span class="empty-pulse"></span>
+          type <span class="cmd">!fight</span> to deploy your sigma
+        </div>
+      </div>
+    </main>
+
+    <!-- Feed shrunken to a single rolling line at the bottom -->
+    <aside id="feed" class="feed"></aside>
+
+    <div id="boss-banner" class="boss-banner hidden">
+      <div class="boss-curtain"></div>
+      <div class="boss-body">
+        <div class="boss-tagline">BOSS</div>
+        <div class="boss-name" id="boss-name">Boss</div>
+        <div class="boss-reason" id="boss-reason"></div>
+      </div>
+    </div>
+
+    <footer id="cmdstrip" class="cmdstrip">
+      <span class="cmd">!fight</span>
+      <span class="cmd">!duel @u 50</span>
+      <span class="cmd">!raid</span>
+      <span class="cmd">!sigma</span>
+    </footer>
+
+    <div id="conn-dot" class="conn-dot offline"></div>
+  </div>
+
+  <script type="module" src="/js/overlay.js"></script>
+</body>
+</html>
