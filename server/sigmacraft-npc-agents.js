@@ -11,6 +11,7 @@
 
 import { NPC_PLAN_REUSE_TICKS, MAX_NPC_AGENT_INCIDENTS, MAX_NPC_AGENT_GOALS } from "../shared/sigmacraft.js";
 import { vNpcProposals } from "./validate.js";
+import { createLlmClient } from "./llm.js";
 
 // FNV-1a — deterministic, zero-IO seed from a string.
 function stableHash(str) {
@@ -112,21 +113,65 @@ function mergePlan(existing, clean, tick) {
   };
 }
 
-// Live Gemma hook — DEFERRED. Only reached when NPC_PLANNER_LIVE=1 && GEMMA_URL
-// set; default OFF ⇒ never invoked, so tests are socket-free. A live fan-out over
-// 200 agents must add a concurrency cap (follow-up).
-async function callGemma(_npcId, _world, _env) {
-  throw new Error("npc live planner not wired (PR7 ships the deterministic fallback)");
+// Live Gemma hook (Phase D). Reached only when NPC_PLANNER_LIVE=1 AND the shared
+// Cerebras seam is available (key set + breaker closed); default OFF ⇒ never
+// invoked, so tests stay socket-free. The seam caps concurrency over the 200-agent
+// fan-out and trips to fallback on provider failure. Output is mapped to the SAME
+// bounded proposal shape and still passes vNpcProposals + apply-time adjacency, so
+// a hallucinated move can never teleport an NPC — at worst it degrades to "talk".
+async function callGemma(npcId, world, llm) {
+  const s = world?.sigmacraft;
+  const rec = s?.overworldNpcs?.[npcId];
+  if (!rec) return null;
+  const tiles = s?.map?.tiles || {};
+  const here = tiles[rec.tileId];
+  const exits = (here?.exits || []).filter((id) => tiles[id]);
+  const exitDesc = exits.map((id) => `${id} (${tiles[id]?.name})`).join(", ") || "none";
+  const system =
+    "You control ONE NPC in a fantasy realm. Reply ONLY with compact JSON: " +
+    '{"goal": string<=80, "line": string<=140, "action": "move" or "talk", "target": string}. ' +
+    "For action=move, target MUST be exactly one of the listed exit tile ids. " +
+    "For action=talk, omit target. No prose, no markdown.";
+  const user =
+    `NPC ${rec.name} (${rec.archetypeLabel || rec.archetype}, faction ${rec.faction}). ` +
+    `Persona: ${rec.persona}. At tile ${rec.tileId} (${here?.name}, danger ${here?.danger ?? "?"}). ` +
+    `Exits: ${exitDesc}. Goals: ${(rec.goals || []).join("; ")}. ` +
+    "Choose the next bounded action and a short in-character line.";
+  const reply = await llm.chat({ system, user, json: true, maxTokens: 200 });
+  const tick = s.tick || 0;
+  const target = String(reply?.target || "");
+  const step =
+    reply?.action === "move" && exits.includes(target)
+      ? { kind: "move", targetId: target }
+      : { kind: "talk", targetId: npcId }; // invalid/absent move target degrades to talk
+  const goal = String(reply?.goal || goalFor(rec, tick)).slice(0, 96);
+  return {
+    npcId,
+    currentGoal: goal,
+    dialogueLine: String(reply?.line || "").slice(0, 140),
+    step,
+    memoryPatch: {
+      goals: [{ text: goal }],
+      recentIncidents: [{ summary: `near ${rec.tileId}`, tick }],
+      summaryPointer: `${npcId}#rolling`,
+    },
+    source: "gemma",
+  };
 }
 
-export function attachNpcPlanner({ store, env = process.env } = {}) {
-  const live = env.NPC_PLANNER_LIVE === "1" && !!env.GEMMA_URL;
+export function attachNpcPlanner({ store, env = process.env, llm = createLlmClient({ env }) } = {}) {
+  const live = env.NPC_PLANNER_LIVE === "1";
   const envMax = Number(env.SIGMACRAFT_NPC_MAX_PER_CYCLE);
 
   async function planOne(npcId, world) {
     let proposal = null;
     try {
-      proposal = live ? await callGemma(npcId, world, env) : makeNpcFallbackProposal(npcId, world);
+      // Live only when explicitly enabled AND the seam is currently available;
+      // otherwise the deterministic fallback (no network) — same default as PR7.
+      proposal =
+        live && llm.available()
+          ? await callGemma(npcId, world, llm)
+          : makeNpcFallbackProposal(npcId, world);
     } catch {
       proposal = makeNpcFallbackProposal(npcId, world); // hard fallback on any model failure
     }
