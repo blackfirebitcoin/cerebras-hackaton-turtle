@@ -19,6 +19,11 @@ import { fileURLToPath } from "node:url";
 import express from "../../server/router.js";
 // Dynamically import store so we can pre-seed minimal state.
 import * as store from "../../server/store.js";
+import { freshWorld } from "../../server/world-tick.js";
+import { enqueueSigmacraftIntent } from "../../server/sigmacraft.js";
+import { projectSigmacraftSnapshot } from "../../shared/sigmacraft.js";
+import { vSigmacraftIntent } from "../../server/validate.js";
+import { TOWN_ID, unlockedZones } from "../../shared/zones.js";
 
 // We build a minimal app mirroring the routes we want to test, using the
 // same store module. This avoids the WebSocket + supervisor boot.
@@ -54,6 +59,44 @@ before(async () => {
   app.get("/api/feed", (_req, res) => {
     const feed = store.getFeed ? store.getFeed(20) : [];
     json(res, { ok: true, feed });
+  });
+
+  // Seed a Sigmacraft-capable world + one token-owning player, then mirror the
+  // real Sigmacraft routes using the SAME handler logic as server.js so the
+  // validation + enqueue + projection contracts are exercised over HTTP.
+  store.initWorldState(() => freshWorld());
+  store.putPlayer("sig_aaaaaaaaaaaaaaaaaaaaaaaa", {
+    token: "sig_aaaaaaaaaaaaaaaaaaaaaaaa",
+    name: "Tester",
+    level: 99,
+    zoneId: TOWN_ID,
+  });
+
+  app.get("/api/sigmacraft/snapshot", (req, res) => {
+    const qs = (req.url || "").split("?")[1] || "";
+    const token = String(new URLSearchParams(qs).get("token") || "").slice(0, 64);
+    const character = token ? store.getPlayer(token)?.character || null : null;
+    json(res, { ok: true, snapshot: projectSigmacraftSnapshot(store.getWorldState(), character) });
+  });
+
+  app.post("/api/sigmacraft/intent", (req, res) => {
+    const token = String(req.body?.token || "").slice(0, 64);
+    const rec = token ? store.getPlayer(token) : null;
+    if (!rec?.character) return json(res, { ok: false, error: "unknown token" }, 401);
+    let intent;
+    try {
+      intent = vSigmacraftIntent(req.body?.intent ?? req.body);
+    } catch (err) {
+      return json(res, { ok: false, error: err?.message || "bad intent" }, 400);
+    }
+    if (intent.kind === "move") {
+      const allowed = new Set([TOWN_ID, ...unlockedZones(rec.character).map((z) => z.id)]);
+      if (!allowed.has(intent.targetId)) return json(res, { ok: false, error: "zone locked" }, 403);
+    }
+    const world = store.getWorldState();
+    const result = enqueueSigmacraftIntent(world, token, intent);
+    store.putWorldState(world);
+    return json(res, { ok: result.status !== "rejected", ...result }, result.status === "rejected" ? 409 : 200);
   });
 
   httpServer = createServer(app);
@@ -109,5 +152,59 @@ describe("GET /api/feed", () => {
     const json = await res.json();
     assert.equal(json.ok, true);
     assert.ok(Array.isArray(json.feed));
+  });
+});
+
+describe("GET /api/sigmacraft/snapshot", () => {
+  test("anonymous returns a snapshot reading a real zone", async () => {
+    const res = await fetch(`${baseUrl}/api/sigmacraft/snapshot`);
+    assert.equal(res.status, 200);
+    const j = await res.json();
+    assert.equal(j.ok, true);
+    assert.equal(j.snapshot.realmId, "sigmacraft_alpha");
+    assert.equal(j.snapshot.place.id, TOWN_ID);
+    assert.deepEqual(j.snapshot.validActions, []);
+  });
+
+  test("token-scoped returns valid actions for the player", async () => {
+    const res = await fetch(`${baseUrl}/api/sigmacraft/snapshot?token=sig_aaaaaaaaaaaaaaaaaaaaaaaa`);
+    const j = await res.json();
+    assert.ok(j.snapshot.validActions.length > 0);
+    assert.ok(j.snapshot.validActions.some((a) => a.kind === "rest"));
+  });
+});
+
+describe("POST /api/sigmacraft/intent", () => {
+  test("rejects an unknown token with 401", async () => {
+    const res = await fetch(`${baseUrl}/api/sigmacraft/intent`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: "sig_000000000000000000000000", intent: { kind: "rest" } }),
+    });
+    assert.equal(res.status, 401);
+  });
+
+  test("rejects a bad intent kind with 400 (validation boundary)", async () => {
+    const res = await fetch(`${baseUrl}/api/sigmacraft/intent`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: "sig_aaaaaaaaaaaaaaaaaaaaaaaa", intent: { kind: "teleport" } }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  test("queues a valid rest intent with 200", async () => {
+    const res = await fetch(`${baseUrl}/api/sigmacraft/intent`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token: "sig_aaaaaaaaaaaaaaaaaaaaaaaa",
+        intent: { kind: "rest", nonce: "api-n1" },
+      }),
+    });
+    assert.equal(res.status, 200);
+    const j = await res.json();
+    assert.equal(j.ok, true);
+    assert.equal(j.status, "queued");
   });
 });

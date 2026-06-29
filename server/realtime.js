@@ -16,6 +16,7 @@ import {
   WS_MSG_MAX_BYTES,
   WS_RATE,
 } from "../shared/constants.js";
+import { projectSigmacraftSnapshot } from "../shared/sigmacraft.js";
 import * as arena from "./arena.js";
 import * as drops from "./drops.js";
 import * as store from "./store.js";
@@ -163,6 +164,12 @@ export function attachRealtime(httpServer, { getRaid } = {}) {
             arena: arena.snapshot(),
             drops: drops.snapshot(),
             raid: getRaid ? getRaid() : null,
+            // Sigmacraft read model on connect (integrate-this PR4 / smallest
+            // native loop step 3) — the browser's primary read path.
+            sigmacraftSnapshot: projectSigmacraftSnapshot(
+              store.getWorldState(),
+              rec ? rec.character : null,
+            ),
           });
           return;
         }

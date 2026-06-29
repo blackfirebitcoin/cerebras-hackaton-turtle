@@ -16,6 +16,7 @@
 // back, and broadcasts a `worldPulse` for the overlay.
 
 import { PLAYER_ACTIVE_MS, WORLD_TICK_MS } from "../shared/constants.js";
+import { createSigmacraftState } from "../shared/sigmacraft.js";
 import { FACTION_IDS, FACTIONS, factionZoneMod, pickFactionRaider } from "../shared/factions.js";
 import { NPC_IDS, NPCS, npcSchedulePhase } from "../shared/npc-defs.js";
 import { rollCrisis, rollWorldEvent } from "../shared/storyteller.js";
@@ -113,6 +114,9 @@ export function freshWorld(seed = DEFAULT_WORLD_SEED) {
     },
     graves: [],
     lastTickAt: 0,
+    // Sigmacraft fantasy projection layer (integrate-this). Bounded pointers and
+    // queues only — resolved by the fast sub-advancer in server/sigmacraft.js.
+    sigmacraft: createSigmacraftState(),
   };
 }
 
@@ -357,24 +361,63 @@ export function injectWorldState(character, world) {
 // rather than spawning their own — the PSU power-safety rule (master §0.4).
 // Each advancer is `(ctx) => void` with ctx = {store, world, players, rt, now};
 // a throw in one is contained (it's wrapped) and never stops the tick.
+// `fastAdvancers` run on EVERY base tick (≈3s) for the Sigmacraft layer; the
+// legacy core tick + `extraAdvancers` (market, storyteller, …) run once every
+// `legacyEvery` base ticks, preserving their original 60s cadence under a single
+// timer. `legacyEvery = 1` (default) reproduces the classic every-tick behaviour.
 export function startWorldTick({
   store,
   rt,
   superviseInterval,
   intervalMs = WORLD_TICK_MS,
   extraAdvancers = [],
+  fastAdvancers = [],
+  legacyEvery = 1,
 }) {
+  let n = 0;
   return superviseInterval(
     "world.tick",
     () => {
       const w = store.getWorldState();
       if (!w) return;
+      n += 1;
+      const now = Date.now();
+      // Tick-overrun/drift telemetry (integrate-this §"three-second tick
+      // budget"): if a base tick exceeds its interval, log it so an operator
+      // can see the world loop falling behind.
+      const checkBudget = () => {
+        const elapsed = Date.now() - now;
+        if (elapsed > intervalMs) {
+          console.warn(`[world.tick] overran budget: ${elapsed}ms > ${intervalMs}ms (tick ${n})`);
+        }
+      };
+
+      // Fast lane — Sigmacraft and other sub-3s advancers, every base tick.
+      // An advancer returns true iff it mutated world state; we only persist on
+      // real changes so idle base ticks don't rewrite world.json (≈20x write
+      // amplification avoided at the 3s cadence).
+      let fastDirty = false;
+      for (const advance of fastAdvancers) {
+        try {
+          if (advance({ store, world: w, rt, now })) fastDirty = true;
+        } catch (err) {
+          console.error(`[world.tick] fast sub-advancer fault: ${err?.message || err}`);
+        }
+      }
+
+      // Legacy lane runs every `legacyEvery` base ticks (≈60s). Outside that
+      // window we persist only when the fast lane actually mutated state.
+      if (n % legacyEvery !== 0) {
+        if (fastDirty) store.putWorldState(w);
+        checkBudget();
+        return;
+      }
+
       const players = store
         .allPlayers()
         .map((p) => p.character)
         .filter(Boolean);
       const zoneEvents = store.drainZoneEvents();
-      const now = Date.now();
       const summary = worldTick(w, players, { zoneEvents, now });
       store.putWorldState(w);
       // Narrative feed for crisis + conquest transitions (master §M5).
@@ -412,6 +455,7 @@ export function startWorldTick({
           at: Date.now(),
         });
       }
+      checkBudget();
     },
     intervalMs,
   );

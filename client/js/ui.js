@@ -78,6 +78,7 @@ export function init(handlers) {
   root.appendChild(buildHud());
   root.appendChild(buildFeed());
   root.appendChild(buildLeaderboard());
+  root.appendChild(buildSigmacraftPanel());
   root.appendChild(buildTownPanel());
   root.appendChild(buildDelveOverlay());
   root.appendChild(buildPanicBar());
@@ -177,6 +178,78 @@ function buildFeed() {
   R.feedTrack = track;
   R.feedTicker = tick;
   return tick;
+}
+
+// ── Sigmacraft panel (integrate-this PR4: the browser's primary read path) ──
+// A compact corner HUD fed by `welcome.sigmacraftSnapshot`: current place,
+// active public quest, valid actions, and the shared recent-events log.
+function buildSigmacraftPanel() {
+  const place = el("div", { id: "sc-place", class: "sc-place", text: "—" });
+  const objective = el("div", { id: "sc-objective", class: "sc-objective" });
+  const actions = el("div", { id: "sc-actions", class: "sc-actions" });
+  const events = el("ul", { id: "sc-events", class: "sc-events" });
+  const panel = el(
+    "div",
+    {
+      id: "sigmacraft-panel",
+      class: "sigmacraft-panel hidden",
+      style: {
+        position: "absolute",
+        left: "12px",
+        bottom: "12px",
+        width: "260px",
+        padding: "10px 12px",
+        background: "rgba(12,16,20,0.82)",
+        border: "1px solid rgba(180,150,90,0.35)",
+        borderRadius: "10px",
+        color: "#e8e2d2",
+        font: "12px/1.4 system-ui, sans-serif",
+        zIndex: 40,
+        pointerEvents: "none",
+      },
+    },
+    [
+      el("div", {
+        class: "sc-title",
+        style: { color: "#c99b53", fontWeight: "700", letterSpacing: "0.04em" },
+        text: "WORLD OF SIGMACRAFT",
+      }),
+      place,
+      objective,
+      actions,
+      el("div", { class: "sc-events-cap", style: { opacity: "0.6", marginTop: "6px" }, text: "Recent" }),
+      events,
+    ],
+  );
+  R.scPanel = panel;
+  R.scPlace = place;
+  R.scObjective = objective;
+  R.scActions = actions;
+  R.scEvents = events;
+  return panel;
+}
+
+export function setSigmacraft(snapshot) {
+  if (!R.scPanel) return;
+  if (!snapshot) {
+    R.scPanel.classList.add("hidden");
+    return;
+  }
+  R.scPanel.classList.remove("hidden");
+  const placeName = snapshot.place?.name || "the wilds";
+  R.scPlace.innerHTML = `You are at <b class="amber">${placeName}</b> · tick ${snapshot.worldTick ?? 0}`;
+  R.scObjective.textContent = snapshot.objective?.title ? `Quest: ${snapshot.objective.title}` : "";
+  clear(R.scActions);
+  for (const a of (snapshot.validActions || []).slice(0, 6)) {
+    R.scActions.appendChild(el("span", { class: "sc-action", text: a.label || a.kind }));
+  }
+  clear(R.scEvents);
+  const events = (snapshot.recentEvents || []).slice(-5).reverse();
+  if (!events.length) {
+    R.scEvents.appendChild(el("li", { class: "dim", text: "the realm is still…" }));
+  } else {
+    for (const ev of events) R.scEvents.appendChild(el("li", { text: ev.text }));
+  }
 }
 
 function buildLeaderboard() {

@@ -19,15 +19,17 @@ import {
   DEFAULT_PORT,
   GEAR_SLOTS,
   INVENTORY_MAX,
+  LEGACY_TICK_EVERY,
   STATS_BROADCAST_MS,
   STORE_FLUSH_MS,
-  WORLD_TICK_MS,
+  WORLD_TICK_BASE_MS,
 } from "../shared/constants.js";
 import { ENEMIES } from "../shared/enemies.js";
 import { FACTION_IDS, factionById } from "../shared/factions.js";
 import { forgeRaidDrop, itemPower } from "../shared/loot.js";
 import { freshMarket } from "../shared/market.js";
 import { passivePointsFor, passiveTreePayload } from "../shared/passive-tree.js";
+import { projectSigmacraftSnapshot } from "../shared/sigmacraft.js";
 import {
   ensureStarterGear,
   freshCharacter,
@@ -46,7 +48,7 @@ import {
   weaponCatalogPayload,
 } from "../shared/vampire-survivors.js";
 import { unlockedArts, upgradeCost, WEAPON_PLUS_MAX } from "../shared/weapons.js";
-import { ZONES } from "../shared/zones.js";
+import { TOWN_ID, unlockedZones, ZONES } from "../shared/zones.js";
 import { attachAgentRealm } from "./agent-realm.js";
 import * as arena from "./arena.js";
 import { refreshLastSeen } from "./arena.js";
@@ -66,6 +68,7 @@ import { attachRealtime } from "./realtime.js";
 import * as retention from "./retention.js";
 import express from "./router.js";
 import * as store from "./store.js";
+import * as sigmacraft from "./sigmacraft.js";
 import * as storytellerLoop from "./storyteller-loop.js";
 import {
   guard,
@@ -75,7 +78,7 @@ import {
   onShutdown,
   superviseInterval,
 } from "./supervisor.js";
-import { vCharacter, vEnum } from "./validate.js";
+import { vCharacter, vEnum, vSigmacraftIntent } from "./validate.js";
 import * as voting from "./voting.js";
 import {
   contributeToCrisis,
@@ -423,6 +426,53 @@ app.get(
   "/api/feed",
   guard("GET /api/feed", (_req, res) => {
     res.json({ feed: store.getFeed() });
+  }),
+);
+// Sigmacraft read model (integrate-this PR8 read surface). Optional ?token=
+// scopes the snapshot to a player's place + valid actions; otherwise anonymous.
+app.get(
+  "/api/sigmacraft/snapshot",
+  guard("GET /api/sigmacraft/snapshot", (req, res) => {
+    const qs = (req.url || "").split("?")[1] || "";
+    const token = String(new URLSearchParams(qs).get("token") || "").slice(0, 64);
+    const character = token ? store.getPlayer(token)?.character || null : null;
+    res.json({ ok: true, snapshot: projectSigmacraftSnapshot(store.getWorldState(), character) });
+  }),
+);
+// Sigmacraft intent write path (integrate-this PR5). A token-owning player
+// queues ONE bounded, validated intent resolved by the next world tick. All
+// inbound mutation passes the validate.js trust boundary; movement is gated by
+// the player's unlocked zones; nonce de-dup is idempotent.
+app.post(
+  "/api/sigmacraft/intent",
+  guard("POST /api/sigmacraft/intent", (req, res) => {
+    const token = String(req.body?.token || "").slice(0, 64);
+    const rec = token ? store.getPlayer(token) : null;
+    if (!rec?.character) {
+      res.status(401).json({ ok: false, error: "unknown token" });
+      return;
+    }
+    let intent;
+    try {
+      intent = vSigmacraftIntent(req.body?.intent ?? req.body);
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err?.message || "bad intent" });
+      return;
+    }
+    if (intent.kind === "move") {
+      const allowed = new Set([TOWN_ID, ...unlockedZones(rec.character).map((z) => z.id)]);
+      if (!allowed.has(intent.targetId)) {
+        res.status(403).json({ ok: false, error: "zone locked" });
+        return;
+      }
+    }
+    const world = store.getWorldState();
+    const result = sigmacraft.enqueueSigmacraftIntent(world, token, intent);
+    store.putWorldState(world);
+    res.status(result.status === "rejected" ? 409 : 200).json({
+      ok: result.status !== "rejected",
+      ...result,
+    });
   }),
 );
 app.get(
@@ -3058,12 +3108,16 @@ superviseInterval("stats.broadcast", () => rt.broadcastStats(), STATS_BROADCAST_
 // The market sweep rides this ONE world loop as a sub-advancer (master §4.1
 // step 7) — expires listings, finalizes auctions, re-derives the gold gauge,
 // toggles the treasury-mode brake. No second timer (PSU power safety).
+// The loop now fires at WORLD_TICK_BASE_MS (≈3s) so the Sigmacraft fast lane
+// feels alive; market + storyteller stay on their 60s cadence via legacyEvery.
 startWorldTick({
   store,
   rt,
   superviseInterval,
-  intervalMs: WORLD_TICK_MS,
+  intervalMs: WORLD_TICK_BASE_MS,
+  legacyEvery: LEGACY_TICK_EVERY,
   extraAdvancers: [(ctx) => market.sweep(ctx), (ctx) => storytellerLoop.advance(ctx)],
+  fastAdvancers: [(ctx) => sigmacraft.advance(ctx)],
 });
 
 // Featured-arena rotator. Picks an "active" sigma (lastSeen within the

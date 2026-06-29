@@ -34,6 +34,7 @@ import {
 import { REAGENT_CODES } from "../shared/crafting.js";
 import { DISEASE_IDS } from "../shared/diseases.js";
 import { FACTION_IDS, FACTION_MAX_REP } from "../shared/factions.js";
+import { SIGMACRAFT_INTENT_KINDS } from "../shared/sigmacraft.js";
 import { BODY_PART_IDS } from "../shared/health.js";
 import { INSPIRATION_IDS } from "../shared/inspirations.js";
 import { SET_IDS } from "../shared/item-sets.js";
@@ -169,6 +170,20 @@ const TOKEN_RE = /^sig_[a-f0-9]{24}$/;
 export function vToken(x) {
   if (typeof x !== "string" || !TOKEN_RE.test(x)) fail("bad token");
   return x;
+}
+
+// Sigmacraft bounded intent (integrate-this trust boundary). Rejects unknown
+// kinds and, for `move`, unknown zone targets — shape only; the route applies
+// the contextual unlock gate with the player's character. `nonce` is bounded and
+// optional (used for idempotent de-dup).
+export function vSigmacraftIntent(x) {
+  const o = asObj(x);
+  const kind = vEnum(o.kind, SIGMACRAFT_INTENT_KINDS); // throws on bad kind
+  const nonce = vStr(o.nonce, 64, "");
+  if (kind === "move") {
+    return { kind, nonce, targetId: vEnum(o.targetId, ZONE_IDS) }; // throws on unknown zone
+  }
+  return { kind, nonce };
 }
 
 // ── Game shapes ───────────────────────────────────────────────────────
