@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1920, initial-scale=1" />
+  <!-- DO NOT add <meta name="color-scheme" content="dark">. It forces the
+       CEF/Chromium UA Canvas color to dark gray, which leaks through any
+       `background: transparent` html/body and makes this OBS overlay opaque
+       on stream. Keep the page color-scheme unset so transparent compositing
+       works. -->
+  <title>SIGMA ABYSS — Arena Overlay</title>
+  <style>
+    /* Transparent canvas so this OBS browser source can sit on top of any
+       base scene. The full surface is one <canvas> that the arena renderer
+       owns; we don't ship any DOM widgets. */
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    body { font-family: 'JetBrains Mono', ui-monospace, monospace; color: #fff; }
+    #arena-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+    /* tiny corner status dot — green when WS is live, red when disconnected.
+       Useful while bringing the overlay up; doesn't show in OBS once stable. */
+    #conn-dot { position: fixed; top: 8px; right: 10px; width: 8px; height: 8px;
+                border-radius: 50%; background: #ef4444; box-shadow: 0 0 6px rgba(0,0,0,.7); opacity: .6; }
+    #conn-dot.online { background: #22c55e; }
+  </style>
+</head>
+<body>
+  <canvas id="arena-canvas" width="1920" height="1080"></canvas>
+  <div id="conn-dot"></div>
+  <script type="module" src="/js/arena.js"></script>
+</body>
+</html>

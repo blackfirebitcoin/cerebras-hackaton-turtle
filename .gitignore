@@ -1,32 +1,16 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-go.work.sum
-
-# env file
+# Secrets — NEVER commit. The Cerebras/LLM key + HMAC keys live ONLY in the
+# environment (e.g. ~/.sigmashake/mmo.env), never in tracked files.
 .env
+.env.*
+*.env
+.sigmashake/
+secrets/
+*.key
+*.pem
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Runtime state + local noise (these were never meant to be tracked)
+node_modules/
+data/
+.DS_Store
+**/.DS_Store
+*.log

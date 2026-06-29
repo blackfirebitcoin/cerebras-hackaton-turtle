@@ -1,0 +1,912 @@
+{
+  "body_human": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 20,
+    "zBack": null,
+    "recolor": "body"
+  },
+  "body_human_female": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 20,
+    "zBack": null,
+    "recolor": "body"
+  },
+  "body_skeleton": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 20,
+    "zBack": null,
+    "recolor": null
+  },
+  "body_zombie": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 20,
+    "zBack": null,
+    "recolor": null
+  },
+  "head_human": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 90,
+    "zBack": null,
+    "recolor": "body"
+  },
+  "head_human_female": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 90,
+    "zBack": null,
+    "recolor": "body"
+  },
+  "head_skeleton": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 90,
+    "zBack": null,
+    "recolor": null
+  },
+  "head_zombie": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 90,
+    "zBack": null,
+    "recolor": null
+  },
+  "eyes_human": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 95,
+    "zBack": null,
+    "recolor": null
+  },
+  "hair_plain": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_long": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_bob": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_spiked": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_afro": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_ponytail": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 130,
+    "zBack": 12,
+    "recolor": "hair"
+  },
+  "hair_pixie": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_idol": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_lob": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_swoop": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_curly": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_bedhead": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_curtains": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_buzzcut": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_halfup": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_braid": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 130,
+    "zBack": 12,
+    "recolor": "hair"
+  },
+  "hair_bunches": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 130,
+    "zBack": 12,
+    "recolor": "hair"
+  },
+  "hair_wavy": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 130,
+    "zBack": 12,
+    "recolor": "hair"
+  },
+  "hair_cornrows": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_dreads": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_dreadslong": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_halfmessy": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_bangs": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_longhawk": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "hair_balding": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 130,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "beard_5oclock": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "beard_basic": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "beard_medium": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "beard_trimmed": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "mustache_basic": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "mustache_handlebar": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "mustache_walrus": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 105,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "eyebrows_thick": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 100,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "eyebrows_thin": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 100,
+    "zBack": null,
+    "recolor": "hair"
+  },
+  "glasses_clear": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "glasses_sun": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "glasses_shades": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "glasses_nerd": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "glasses_round": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "glasses_monocle": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "glasses_eyepatch": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 145,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_hood": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_santa": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_pirate": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_headband": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_visor": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "shirt_shortsleeve": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 80,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "shirt_sleeveless": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 80,
+    "zBack": null,
+    "recolor": null
+  },
+  "shirt_vest": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 80,
+    "zBack": null,
+    "recolor": null
+  },
+  "pants_shorts": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "pants_shortshorts": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "pants_leggings": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "pants_pantaloons": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "pants_formal": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "shoes_boots": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 60,
+    "zBack": null,
+    "recolor": null
+  },
+  "shoes_sandals": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 60,
+    "zBack": null,
+    "recolor": null
+  },
+  "shoes_slippers": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 60,
+    "zBack": null,
+    "recolor": null
+  },
+  "pants_skirt": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "pants_legionskirt": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "jacket_collared": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 85,
+    "zBack": null,
+    "recolor": null
+  },
+  "jacket_frock": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 85,
+    "zBack": null,
+    "recolor": null
+  },
+  "jacket_trench": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 85,
+    "zBack": null,
+    "recolor": null
+  },
+  "jacket_tabard": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 85,
+    "zBack": null,
+    "recolor": null
+  },
+  "jacket_santa": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 85,
+    "zBack": null,
+    "recolor": null
+  },
+  "shoulders_pauldrons": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 88,
+    "zBack": null,
+    "recolor": null
+  },
+  "shoulders_bauldron": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 88,
+    "zBack": null,
+    "recolor": null
+  },
+  "shoulders_epaulets": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 88,
+    "zBack": null,
+    "recolor": null
+  },
+  "shoulders_mantal": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 88,
+    "zBack": null,
+    "recolor": null
+  },
+  "bracers_basic": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 86,
+    "zBack": null,
+    "recolor": null
+  },
+  "neck_chain": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 96,
+    "zBack": null,
+    "recolor": null
+  },
+  "neck_beaded": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 96,
+    "zBack": null,
+    "recolor": null
+  },
+  "neck_cross": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 96,
+    "zBack": null,
+    "recolor": null
+  },
+  "neck_star": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 96,
+    "zBack": null,
+    "recolor": null
+  },
+  "neck_scarf": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 96,
+    "zBack": null,
+    "recolor": null
+  },
+  "backpack_basic": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 8,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_elf": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmviking": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmbarbarian": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmmorion": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmkettle": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmlegion": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmnorman": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_helmarmet": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_magicceles": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_magiclarge": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "shirt_basic": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 80,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "pants_basic": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 70,
+    "zBack": null,
+    "recolor": "cloth"
+  },
+  "shoes_basic": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 60,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_cap": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_beanie": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_tophat": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_bowler": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_wizard": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_crown": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_crown_moon": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_tiara": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "hat_tiara_rose": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["_"],
+    "z": 140,
+    "zBack": null,
+    "recolor": null
+  },
+  "wings_feathered": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 150,
+    "zBack": 5,
+    "recolor": null
+  },
+  "wings_bat": {
+    "anims": ["idle", "walk", "slash", "thrust", "hurt", "sit", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 150,
+    "zBack": 5,
+    "recolor": null
+  },
+  "wings_monarch": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 150,
+    "zBack": 5,
+    "recolor": null
+  },
+  "wings_pixie": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["fg", "bg"],
+    "z": 150,
+    "zBack": 5,
+    "recolor": null
+  },
+  "cape_solid": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 5,
+    "zBack": null,
+    "recolor": null
+  },
+  "cape_silk": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 5,
+    "zBack": null,
+    "recolor": null
+  },
+  "cape_warlord": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 5,
+    "zBack": null,
+    "recolor": null
+  },
+  "cape_dragonhide": {
+    "anims": ["walk", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 5,
+    "zBack": null,
+    "recolor": null
+  },
+  "weapon_blade": {
+    "anims": ["walk", "slash", "thrust", "hurt"],
+    "parts": ["fg", "bg"],
+    "z": 98,
+    "zBack": 15,
+    "recolor": null
+  },
+  "weapon_longsword": {
+    "anims": ["walk", "slash", "thrust", "hurt"],
+    "parts": ["fg", "bg"],
+    "z": 98,
+    "zBack": 15,
+    "recolor": null
+  },
+  "weapon_axe": {
+    "anims": ["walk", "slash", "hurt"],
+    "parts": ["fg", "bg"],
+    "z": 98,
+    "zBack": 15,
+    "recolor": null
+  },
+  "weapon_glowsword": {
+    "anims": ["walk", "slash", "hurt"],
+    "parts": ["fg", "bg"],
+    "z": 98,
+    "zBack": 15,
+    "recolor": null
+  },
+  "shield_round": {
+    "anims": ["walk", "slash", "thrust"],
+    "parts": ["_"],
+    "z": 97,
+    "zBack": null,
+    "recolor": null
+  },
+  "shield_kite": {
+    "anims": ["walk", "slash", "thrust"],
+    "parts": ["_"],
+    "z": 97,
+    "zBack": null,
+    "recolor": null
+  },
+  "weapon_staff": {
+    "anims": ["walk", "thrust", "hurt"],
+    "parts": ["fg", "bg"],
+    "z": 98,
+    "zBack": 15,
+    "recolor": null
+  },
+  "weapon_bow": {
+    "anims": ["walk"],
+    "parts": ["fg", "bg"],
+    "z": 98,
+    "zBack": 15,
+    "recolor": null
+  },
+  "dress_minigown_pastel": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_uniform_school": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_fairy_dew": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_ballgown_mint": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_pastelgoth": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_ballgown_rose": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_princess_gold": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  },
+  "dress_cyber_neon": {
+    "anims": ["walk", "idle", "slash", "thrust", "hurt", "spellcast"],
+    "parts": ["_"],
+    "z": 82,
+    "zBack": null,
+    "recolor": null
+  }
+}

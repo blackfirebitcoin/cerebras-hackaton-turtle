@@ -1,0 +1,935 @@
+/* SIGMA ABYSS — compact in-scene panel.
+ *
+ * Authored at native 720×420 — the OBS browser source should be set to
+ * the same dimensions so no scaling occurs and fonts stay crisp.
+ * Body has data-panel="true" so overlay.js skips its fit-to-viewport
+ * transform (which is intended for the full-screen /overlay route). */
+
+:root {
+  --bg-card: rgba(11, 14, 22, 0.82);
+  --bg-card-strong: rgba(11, 14, 22, 0.94);
+  --line: rgba(160, 188, 255, 0.18);
+  --line-strong: rgba(160, 188, 255, 0.42);
+  --text: #e7ecf5;
+  --text-dim: #93a0b9;
+  --accent: #6df2ff;
+  --accent-2: #ff5db1;
+  --gold: #ffd43c;
+  --hp: #ff5252;
+  --hp-bg: #2a0e10;
+  --xp: #8af7a3;
+  --boss: #ff3a4f;
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --font-display: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 720px;
+  height: 420px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-display);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#stage {
+  position: relative;
+  width: 720px;
+  height: 420px;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────── */
+#topbar {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  height: 30px;
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: 14px;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.brand {
+  display: flex;
+  gap: 3px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  font-size: 14px;
+}
+.brand-mark {
+  color: var(--accent);
+}
+.brand-mark.mark-2 {
+  color: var(--accent-2);
+}
+.players {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+.players #players-count {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.players-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4dd16a;
+  box-shadow: 0 0 8px rgba(77, 209, 106, 0.7);
+  animation: pulse 1.6s infinite ease-in-out;
+}
+.players-label {
+  font-weight: 400;
+}
+.leaderboard {
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  justify-content: flex-end;
+}
+.lb-row {
+  display: inline-flex;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.lb-rank {
+  color: var(--gold);
+  font-weight: 700;
+}
+.lb-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.lb-stat {
+  color: var(--text-dim);
+}
+
+/* ── Arena — the encounter card ──────────────────────────────── */
+#arena {
+  position: absolute;
+  top: 42px;
+  left: 6px;
+  right: 6px;
+  bottom: 64px;
+  display: grid;
+  place-items: stretch;
+}
+.featured-card {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-card-strong);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 10px 14px;
+  gap: 8px;
+  font-size: 14px;
+}
+.featured-card.mode-raid {
+  border-color: rgba(255, 58, 79, 0.55);
+  box-shadow:
+    0 0 28px rgba(255, 58, 79, 0.22),
+    var(--shadow);
+}
+.featured-card.mode-duel {
+  border-color: rgba(255, 215, 60, 0.55);
+  box-shadow:
+    0 0 28px rgba(255, 215, 60, 0.22),
+    var(--shadow);
+}
+.featured-card.empty {
+  display: grid;
+  place-items: center;
+  grid-template-rows: 1fr;
+}
+.featured-empty {
+  color: var(--text-dim);
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+.empty-pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 8px;
+  vertical-align: middle;
+  animation: pulse 1.4s infinite ease-in-out;
+}
+
+/* Header line of card */
+.fc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.fc-title {
+  display: inline-flex;
+  gap: 6px;
+}
+.fc-title .label-accent {
+  color: var(--accent);
+}
+.fc-login {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(109, 242, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(109, 242, 255, 0.35);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+.fc-login::before {
+  content: "@";
+  color: var(--accent);
+}
+
+/* ── Versus row (compact) ──────────────────────────────────── */
+.versus {
+  display: grid;
+  grid-template-columns: 1fr 36px 1fr;
+  gap: 8px;
+  align-items: center;
+  min-height: 0;
+}
+.vs-side {
+  display: grid;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  min-height: 0;
+}
+.vs-side.vs-sigma {
+  border-left: 3px solid var(--accent);
+}
+.vs-side.vs-enemy {
+  border-right: 3px solid var(--accent-2);
+  text-align: center;
+  justify-items: center;
+}
+.vs-tag {
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.vs-tag.enemy-kind-elite {
+  color: var(--gold);
+}
+.vs-tag.enemy-kind-boss {
+  color: var(--boss);
+}
+.vs-divider {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-align: center;
+  color: var(--text-dim);
+  text-shadow: 0 0 10px rgba(255, 93, 177, 0.4);
+}
+.enemy-emoji {
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.5));
+  animation: enemy-bob 2.4s ease-in-out infinite;
+}
+.enemy-name {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.enemy-special {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--accent-2);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 93, 177, 0.1);
+  border: 1px solid rgba(255, 93, 177, 0.35);
+}
+.enemy-special.spacer {
+  visibility: hidden;
+}
+
+/* Sigma side (compact) */
+.fc-name {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+.fc-title-badge {
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.fc-zone {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.fc-zone .zone-tag {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.fc-gear-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.gear-slot {
+  font-size: 13px;
+  color: #e2d4ff;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.gear-slot svg {
+  width: 13px;
+  height: 13px;
+}
+.gear-slot.armor {
+  margin-left: 4px;
+  color: #9fd6ff;
+}
+.gear-name {
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  font-size: 10px;
+}
+.gear-name.gear-empty {
+  color: var(--text-dim);
+  font-style: italic;
+  font-weight: 400;
+}
+.gear-name.gear-common {
+  color: #c9d3e3;
+}
+.gear-name.gear-uncommon {
+  color: #5bd16a;
+  border-color: rgba(91, 209, 106, 0.5);
+}
+.gear-name.gear-rare {
+  color: #4aa3ff;
+  border-color: rgba(74, 163, 255, 0.5);
+}
+.gear-name.gear-epic {
+  color: #b86bff;
+  border-color: rgba(184, 107, 255, 0.5);
+}
+.gear-name.gear-legendary {
+  color: #ff9d2e;
+  border-color: rgba(255, 157, 46, 0.6);
+}
+.gear-name.gear-mythic {
+  color: #ff4d6d;
+  border-color: rgba(255, 77, 109, 0.7);
+}
+.gear-name.gear-oneofone {
+  color: #ffe44d;
+  border-color: rgba(255, 228, 77, 0.8);
+}
+.gear-tag {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.fc-hp-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 36px;
+  align-items: center;
+  gap: 6px;
+}
+.fc-hp-label {
+  color: var(--hp);
+  font-weight: 700;
+  font-size: 10px;
+}
+.fc-hp-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--hp-bg);
+  overflow: hidden;
+  border: 1px solid rgba(255, 82, 82, 0.4);
+}
+.fc-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--hp), #ff8a4d);
+  transition: width 0.5s ease;
+}
+.fc-hp-val {
+  color: var(--hp);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-size: 10px;
+}
+
+/* Stats strip — hidden in compact mode (too small to be useful) */
+.fc-stats-strip {
+  display: none;
+}
+
+/* Footer of card — slim */
+.fc-footer {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  display: flex;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 10px;
+  flex-wrap: wrap;
+}
+.fc-footer .tag {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+.fc-footer .tag.big {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+/* ── Raid panel (compact) ───────────────────────────────────── */
+.raid-arena {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+  min-height: 0;
+}
+.raid-boss {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 8px;
+  background: rgba(255, 58, 79, 0.08);
+  border: 1.5px solid rgba(255, 58, 79, 0.5);
+  border-radius: 10px;
+}
+.raid-boss-emoji {
+  font-size: 80px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 14px rgba(255, 58, 79, 0.5));
+  animation: enemy-bob 1.8s ease-in-out infinite;
+}
+.raid-boss-canvas {
+  width: 110px;
+  height: 110px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 14px rgba(255, 58, 79, 0.55));
+}
+.raid-boss-name {
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+}
+.raid-hpbar {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  background: var(--hp-bg);
+  border: 1px solid rgba(255, 58, 79, 0.6);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.raid-hpfill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff3a4f, #ff8a4d);
+  transition: width 0.4s ease;
+}
+.raid-hpval {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 9px;
+  color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  font-variant-numeric: tabular-nums;
+}
+.raid-side {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 0;
+  overflow: hidden;
+}
+.raid-side-title {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+}
+.contrib-list {
+  display: grid;
+  gap: 2px;
+}
+.contrib-row {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.contrib-rank {
+  color: var(--gold);
+  font-weight: 800;
+  font-size: 10px;
+}
+.contrib-name {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contrib-dmg {
+  color: var(--hp);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+.contrib-empty {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 10px;
+  padding: 4px;
+}
+
+.raid-cta {
+  justify-content: center;
+}
+.raid-cta .tag.big {
+  font-size: 11px;
+}
+
+.raid-pulse {
+  animation: raid-pulse 1.6s infinite ease-in-out;
+}
+@keyframes raid-pulse {
+  0%,
+  100% {
+    color: var(--boss);
+  }
+  50% {
+    color: var(--text);
+  }
+}
+
+.raid-hit-flash {
+  position: absolute;
+  left: 28%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--boss);
+  text-shadow: 0 0 14px rgba(255, 58, 79, 0.9);
+  animation: hit-pop 1s ease-out forwards;
+  pointer-events: none;
+  z-index: 26;
+}
+@keyframes hit-pop {
+  0% {
+    transform: translate(-50%, -10%) scale(0.4);
+    opacity: 0;
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -90%) scale(1);
+    opacity: 0;
+  }
+}
+
+/* ── Duel panel (compact) ───────────────────────────────────── */
+.duel-pulse {
+  animation: duel-pulse 1.4s infinite ease-in-out;
+}
+@keyframes duel-pulse {
+  0%,
+  100% {
+    color: var(--gold);
+  }
+  50% {
+    color: var(--text);
+  }
+}
+.duel-stage {
+  display: grid;
+  grid-template-columns: 1fr 70px 1fr;
+  gap: 8px;
+  align-items: stretch;
+  min-height: 0;
+}
+.fighter {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  min-height: 0;
+}
+.fighter-blue {
+  border-color: rgba(74, 163, 255, 0.6);
+}
+.fighter-red {
+  border-color: rgba(255, 82, 82, 0.6);
+}
+.fighter-emoji {
+  font-size: 56px;
+  line-height: 1;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.5));
+}
+.fighter-name {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.fighter-sub {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.fighter-hp {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+}
+.fighter-hp-bar {
+  width: 100%;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--hp-bg);
+  border: 1px solid rgba(255, 82, 82, 0.4);
+  overflow: hidden;
+}
+.fighter-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--hp), #ff8a4d);
+  transition: width 0.4s ease;
+}
+.fighter-hp-val {
+  font-size: 10px;
+  color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.duel-vs {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  align-self: center;
+}
+.duel-vs-text {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--accent-2);
+  text-shadow: 0 0 14px rgba(255, 93, 177, 0.6);
+}
+/* .duel-pot removed — wager/pot display neutralized for YouTube safety */
+
+.duel-hit-flash {
+  position: absolute;
+  top: 50%;
+  font-size: 28px;
+  font-weight: 900;
+  text-shadow: 0 0 12px rgba(255, 82, 82, 0.7);
+  pointer-events: none;
+  z-index: 26;
+  animation: hit-pop 0.9s ease-out forwards;
+  color: var(--hp);
+}
+.duel-hit-flash.duel-hit-left {
+  left: 22%;
+}
+.duel-hit-flash.duel-hit-right {
+  left: 75%;
+}
+.duel-hit-flash.crit {
+  color: var(--gold);
+  text-shadow: 0 0 16px rgba(255, 212, 60, 0.9);
+}
+
+/* ── Feed strip at bottom of arena (one-line rolling) ────────── */
+.feed {
+  display: none; /* Compact panel has no room for a feed sidebar. */
+}
+
+/* ── Boss banner — small cinematic ──────────────────────────── */
+.boss-banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 30;
+}
+.boss-banner.hidden {
+  display: none;
+}
+.boss-curtain {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(255, 58, 79, 0.4), rgba(0, 0, 0, 0.85) 70%);
+  animation: boss-flash 0.6s ease-out;
+}
+.boss-body {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  animation: boss-pop 0.5s cubic-bezier(0.2, 0.9, 0.35, 1.2);
+}
+.boss-tagline {
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: var(--boss);
+  text-shadow: 0 0 10px rgba(255, 58, 79, 0.8);
+  margin-bottom: 6px;
+}
+.boss-name {
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text);
+  text-shadow: 0 0 18px rgba(255, 58, 79, 0.95);
+  letter-spacing: 1px;
+}
+.boss-reason {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+@keyframes boss-flash {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes boss-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── Bottom command strip ──────────────────────────────────── */
+.cmdstrip {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 13px;
+  height: 26px;
+}
+.cmd {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(109, 242, 255, 0.08);
+  border: 1px solid rgba(109, 242, 255, 0.35);
+  padding: 1px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.4px;
+  font-size: 12px;
+}
+
+/* ── Conn dot ─────────────────────────────────────────────── */
+.conn-dot {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #888;
+  opacity: 0.4;
+  z-index: 5;
+}
+.conn-dot.online {
+  background: #4dd16a;
+  box-shadow: 0 0 5px rgba(77, 209, 106, 0.6);
+}
+.conn-dot.offline {
+  background: #ff5252;
+}
+
+/* ── Action flash (twitch redemption) ─────────────────────── */
+.action-flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-shadow: 0 0 14px rgba(109, 242, 255, 0.9);
+  animation: action-flash 1.4s ease-out forwards;
+  pointer-events: none;
+  z-index: 25;
+}
+@keyframes action-flash {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+
+/* ── Result banner (raid/duel end) ───────────────────────── */
+.result-banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.92) 75%);
+  z-index: 28;
+  animation: result-fade 5.5s ease-out forwards;
+  pointer-events: none;
+}
+.result-title {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 0 18px rgba(109, 242, 255, 0.7);
+  text-align: center;
+  padding: 0 16px;
+}
+.result-sub {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  text-align: center;
+}
+@keyframes result-fade {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  85% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+}
+@keyframes enemy-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
