@@ -73,6 +73,9 @@ import { attachNpcPlanner } from "./sigmacraft-npc-agents.js";
 import { attachDirector } from "./sigmacraft-director.js";
 import { createBossDropForge } from "./cerebras-boss-drops.js";
 import { runPartyDelve } from "./party-delve.js";
+import { commitPartyDemo, runPartyDemo } from "./party-demo.js";
+import { ensureDemoRun } from "./party-build.js";
+import { demoThroughputStatus, setDemoThroughputProfile } from "./sigmacraft-demo-throughput.js";
 import * as storytellerLoop from "./storyteller-loop.js";
 import {
   guard,
@@ -455,6 +458,22 @@ app.get(
     res.json({ ok: true, map: store.getWorldState()?.sigmacraft?.map || null });
   }),
 );
+app.get(
+  "/api/sigmacraft/demo/throughput",
+  guard("GET /api/sigmacraft/demo/throughput", (_req, res) => {
+    res.json({ ok: true, planner: demoThroughputStatus(store.getWorldState()?.sigmacraft) });
+  }),
+);
+app.post(
+  "/api/sigmacraft/demo/throughput",
+  guard("POST /api/sigmacraft/demo/throughput", (req, res) => {
+    const profile = String(req.body?.profile || "").slice(0, 32);
+    const world = store.getWorldState();
+    const planner = setDemoThroughputProfile(world?.sigmacraft, profile);
+    store.putWorldState(world);
+    res.json({ ok: true, planner });
+  }),
+);
 // Sigmacraft intent write path (integrate-this PR5). A token-owning player
 // queues ONE bounded, validated intent resolved by the next world tick. All
 // inbound mutation passes the validate.js trust boundary; movement is gated by
@@ -498,6 +517,7 @@ app.post(
     const character = freshCharacter(seed, "Playtester");
     character.highestLevel = 60; // unlock every zone (max minLevel is 50) for free roam
     character.isPlaytest = true; // sandbox flag — the ONLY characters the party-delve demo may touch
+    ensureDemoRun(character); // first paint is an alive, full-HP demo hero
     character.lastSeen = Date.now();
     store.putPlayer(token, character);
     res.json({
@@ -534,6 +554,64 @@ app.post(
     store.putPlayer(token, rec.character); // persist the leader's new loot
     store.putWorldState(world); // persist party.lastDelve
     res.json(out);
+  }),
+);
+// Automated demo slice: tavern party-finding -> automatic travel -> wave combat.
+// Like /delve, this is request-driven and playtest-only; the world tick/planners
+// never trigger it.
+app.post(
+  "/api/sigmacraft/demo/party-run",
+  guard("POST /api/sigmacraft/demo/party-run", (req, res) => {
+    const token = String(req.body?.token || "").slice(0, 64);
+    const rec = token ? store.getPlayer(token) : null;
+    if (!rec?.character) {
+      res.status(401).json({ ok: false, error: "unknown token" });
+      return;
+    }
+    if (!rec.character.isPlaytest) {
+      res.status(403).json({ ok: false, error: "party run is a playtest-only demo surface" });
+      return;
+    }
+    const world = store.getWorldState();
+    const out = runPartyDemo({ world, store, token, character: rec.character, bossDrops });
+    if (!out.ok) {
+      res.status(400).json(out);
+      return;
+    }
+    store.putPlayer(token, rec.character);
+    store.putWorldState(world);
+    res.json({
+      ...out,
+      snapshot: projectSigmacraftSnapshot(world, rec.character, { token }),
+    });
+  }),
+);
+app.post(
+  "/api/sigmacraft/demo/party-run/commit",
+  guard("POST /api/sigmacraft/demo/party-run/commit", (req, res) => {
+    const token = String(req.body?.token || "").slice(0, 64);
+    const runId = String(req.body?.runId || "").slice(0, 80);
+    const rec = token ? store.getPlayer(token) : null;
+    if (!rec?.character) {
+      res.status(401).json({ ok: false, error: "unknown token" });
+      return;
+    }
+    if (!rec.character.isPlaytest) {
+      res.status(403).json({ ok: false, error: "party run is a playtest-only demo surface" });
+      return;
+    }
+    const world = store.getWorldState();
+    const out = commitPartyDemo({ world, store, token, character: rec.character, runId });
+    if (!out.ok) {
+      res.status(400).json(out);
+      return;
+    }
+    store.putPlayer(token, rec.character);
+    store.putWorldState(world);
+    res.json({
+      ...out,
+      snapshot: projectSigmacraftSnapshot(world, rec.character, { token }),
+    });
   }),
 );
 app.get(
@@ -3133,6 +3211,16 @@ app.get(
   }),
 );
 
+// This repo's active vertical slice is Sigmacraft. Keep the bare localhost URL
+// from landing on the older SIGMA ABYSS idle-client death screen.
+app.get(
+  "/",
+  guard("GET /", (_req, res) => {
+    res.status(302).set("Location", "/sigmacraft");
+    res.end();
+  }),
+);
+
 // Arena overlay — canvas-based "every chatter on stage" scene with one
 // LPC avatar per active chatter, HP bars, and the auto-battle ticker.
 // Designed for a full-screen OBS browser source (1920×1080); transparent
@@ -3587,7 +3675,7 @@ installShutdown();
 server.listen(PORT, HOST, () => {
   console.log("");
   console.log("  ███ SIGMA ABYSS — server up");
-  console.log(`  play    http://${HOST}:${PORT}`);
+  console.log(`  play    http://${HOST}:${PORT}/sigmacraft`);
   console.log(`  health  http://${HOST}:${PORT}/healthz`);
   console.log("  tunnel  npm run tunnel   (public URL for viewers)");
   console.log("");

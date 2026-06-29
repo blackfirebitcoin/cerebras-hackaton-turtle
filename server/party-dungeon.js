@@ -21,6 +21,8 @@ function enemyToCombatant(e, idx, bossId = null) {
     isPlayer: false,
     isBoss: e.kind === "boss",
     bossId,
+    baseEnemyId: e.id,
+    lpc: e.lpc || null,
     enemyKind: e.kind,
     lootBonus: e.lootBonus || 0,
     sheet: { maxHp: e.maxHp, attack: e.attack, defense: e.defense, speed: e.speed || 8, ...ENEMY_SHEET_EXTRA },

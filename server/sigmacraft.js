@@ -80,6 +80,17 @@ function actorName(token) {
   return `Wanderer ${(h >>> 0).toString(36).slice(-4)}`;
 }
 
+function disbandParty(sigmacraft, token) {
+  const party = sigmacraft?.parties?.[token];
+  if (!party) return false;
+  for (const m of party.members || []) {
+    const npc = sigmacraft.overworldNpcs?.[m.npcId];
+    if (npc && npc.partyLock === token) npc.partyLock = null;
+  }
+  delete sigmacraft.parties[token];
+  return true;
+}
+
 // Queue a validated intent for the next tick. One pending intent per actor +
 // idempotent nonce de-dup. Returns the queue status for the response.
 export function enqueueSigmacraftIntent(world, token, intent) {
@@ -157,6 +168,12 @@ export function advance(ctx) {
       }
       sigmacraft.actorPlaces[token] = dest.id;
       emit(`${actorName(token)} traveled to ${dest.name}.`);
+      const completedParty = sigmacraft.parties[token]?.status === "done" && fromTile?.type === "dungeon";
+      if (completedParty) {
+        disbandParty(sigmacraft, token);
+        emit(`${actorName(token)}'s party split up after leaving the dungeon.`);
+        continue;
+      }
       // The party travels together: recruited members (partyLocked, so the planner
       // leaves them be) follow the leader to the new tile each hop.
       const party = sigmacraft.parties[token];
@@ -205,13 +222,7 @@ export function advance(ctx) {
         emit(`${npc.name} joined ${actorName(token)}'s party.`);
       }
     } else if (intent.kind === "disband") {
-      const party = sigmacraft.parties[token];
-      if (party) {
-        for (const m of party.members) {
-          const npc = sigmacraft.overworldNpcs?.[m.npcId];
-          if (npc && npc.partyLock === token) npc.partyLock = null;
-        }
-        delete sigmacraft.parties[token];
+      if (disbandParty(sigmacraft, token)) {
         emit(`${actorName(token)} disbanded the party.`);
       }
     }

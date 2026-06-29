@@ -16,6 +16,9 @@
     background: radial-gradient(1200px 700px at 70% -10%, #1a2420, var(--bg-0) 70%);
     color: var(--text); font: 14px/1.5 system-ui, -apple-system, sans-serif; overflow: hidden;
   }
+  body.dungeon-focus::before {
+    content: ""; position: fixed; inset: 0; background: rgba(3,5,4,.72); z-index: 20; pointer-events: none;
+  }
   header {
     display: flex; align-items: baseline; gap: 16px; padding: 10px 18px;
     border-bottom: 1px solid var(--line); background: rgba(0,0,0,.25);
@@ -35,13 +38,19 @@
 
   /* world map — grid tiles (vertical-slice style) */
   .map-meta { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+  #map-stage { position: relative; flex: 1; min-height: 0; }
   #map-grid {
-    display: grid; gap: 2px; flex: 1; min-height: 0; align-content: start;
+    display: grid; gap: 2px; height: 100%; min-height: 0; align-content: start;
+  }
+  #map-agents {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+    image-rendering: pixelated; z-index: 5;
   }
   .map-cell {
     position: relative; aspect-ratio: 1; border: 1px solid rgba(0,0,0,.25); border-radius: 3px;
     cursor: default; overflow: hidden; min-width: 0; transition: filter .1s;
   }
+  .map-cell .glyph { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.58); font-size: clamp(9px, 1.1vw, 16px); text-shadow: 0 1px 2px #000; }
   .map-cell .pin { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; color: #fff; text-shadow: 0 1px 2px #000; }
   .map-cell .cnt { position: absolute; right: 1px; bottom: 0; font-size: 8px; color: rgba(255,255,255,.92); text-shadow: 0 1px 2px #000; line-height: 1; }
   .map-cell.exit { cursor: pointer; box-shadow: inset 0 0 0 1.5px rgba(127,196,165,.9); }
@@ -51,12 +60,49 @@
   .map-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
 
   /* small side-scroller pane */
-  .scene-pane { position: relative; height: 156px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 6px; }
+  .scene-pane { position: relative; height: 238px; min-height: 238px; flex: 0 0 238px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 6px; }
+  body.dungeon-focus .scene-pane {
+    position: fixed; z-index: 30; left: 50%; top: 48%; transform: translate(-50%, -50%);
+    width: min(1040px, 88vw); height: min(520px, 58vh); min-height: min(520px, 58vh); flex: none;
+    box-shadow: 0 28px 90px rgba(0,0,0,.72), 0 0 0 1px rgba(216,166,87,.28);
+  }
   #scene { display: block; width: 100%; height: 100%; }
   .scene-cap { position: absolute; left: 12px; bottom: 10px; text-shadow: 0 2px 8px #000; pointer-events: none; }
   .scene-cap .place { font-size: 17px; font-weight: 700; }
   .scene-cap .tierbadge { display: inline-block; font-size: 9px; padding: 2px 7px; border-radius: 999px; margin-top: 3px; }
+  #result-card {
+    display: none; position: absolute; right: 18px; top: 18px; width: min(360px, 42%); max-height: calc(100% - 36px);
+    overflow-y: auto; z-index: 4; padding: 14px; border: 1px solid rgba(216,166,87,.36); border-radius: 8px;
+    background: rgba(12,15,13,.88); box-shadow: 0 18px 44px rgba(0,0,0,.48);
+  }
+  #result-card.show { display: block; }
+  .result-title { color: var(--amber); font-size: 22px; font-weight: 800; letter-spacing: .08em; }
+  .loot-grid { display: grid; gap: 7px; margin-top: 10px; }
+  .loot-card { padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.045); }
+  .loot-card b { color: #f3dfac; }
+  .speech {
+    position: absolute; z-index: 3; max-width: 170px; padding: 5px 7px; border-radius: 7px;
+    background: rgba(7,10,8,.82); border: 1px solid rgba(255,255,255,.16); color: #f1ead8;
+    font-size: 11px; line-height: 1.25; box-shadow: 0 8px 18px rgba(0,0,0,.28);
+  }
   .flavor { color: #cdd8d0; font-size: 12px; margin: 2px 0 0; }
+  #planner-wrap {
+    margin-top: 10px; padding: 9px; border: 1px solid rgba(216,166,87,.24);
+    border-radius: 8px; background: rgba(216,166,87,.055);
+  }
+  .planner-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .planner-controls button.act { text-align: center; }
+  .planner-controls button.active { border-color: var(--amber); background: rgba(216,166,87,.22); color: #ffe7ad; }
+  #planner-health { margin-top: 8px; display: grid; gap: 6px; font-size: 11px; }
+  .planner-top { display: flex; justify-content: space-between; gap: 8px; color: #f3dfac; }
+  .planner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; }
+  .planner-metric { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+  .planner-metric b { color: var(--text); }
+  .planner-metric.bad b, .planner-warning.bad { color: var(--danger); }
+  .planner-metric.good b, .planner-warning.good { color: var(--teal); }
+  .queuebar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .queuebar i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--amber), var(--danger)); }
+  .planner-warning { padding-top: 2px; font-weight: 700; }
 
   .actions { display: flex; flex-direction: column; gap: 7px; }
   button.act {
@@ -68,11 +114,17 @@
   button.act.rest { background: rgba(216,166,87,.10); }
   button.act.talk { background: rgba(150,150,220,.12); }
   button.act.recruit { background: rgba(127,196,165,.14); }
+  button.act.primary { background: rgba(216,166,87,.18); border-color: rgba(216,166,87,.35); font-weight: 700; }
+  button.act.primary:disabled { opacity: .6; cursor: wait; }
   button.act.tiny { padding: .1rem .4rem; font-size: .8em; }
   #tavern-wrap { margin-top: .6rem; padding: .5rem; border: 1px solid rgba(127,196,165,.25); border-radius: 8px; background: rgba(127,196,165,.05); }
   .party-hd { font-weight: 600; margin-bottom: .3rem; }
   .party-list { list-style: none; padding: 0; margin: .2rem 0; }
   .party-list li { padding: .12rem 0; }
+  .decision-grid { display: grid; gap: 4px; margin-top: 6px; }
+  .decision { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,.035); font-size: 12px; }
+  .decision.yes { border-color: rgba(127,196,165,.28); }
+  .decision.no { opacity: .68; }
   #dungeon-wrap { margin-top: .6rem; padding: .5rem; border: 1px solid rgba(215,116,116,.3); border-radius: 8px; background: rgba(215,116,116,.05); }
   button.act.delve { background: rgba(215,116,116,.18); width: 100%; margin: .4rem 0; font-weight: 600; }
   .combat { margin-top: .5rem; }
@@ -81,6 +133,16 @@
   .combat-loot li, .combat-log li { padding: .08rem 0; font-size: .92em; }
   .combat-log { max-height: 220px; overflow-y: auto; }
   .combat-log li.kill { color: var(--danger); }
+  .wave-pills { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0; }
+  .wave-pill { font-size: 11px; padding: 3px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .wave-pill.active { color: var(--text); border-color: var(--amber); background: rgba(216,166,87,.12); }
+  .hp-strip { display: grid; gap: 4px; margin-top: 7px; }
+  .hp-row { display: grid; grid-template-columns: 92px 1fr 38px; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); }
+  .hp-row .bar { height: 5px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .hp-row .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--amber)); }
+  .hp-row.enemy .bar i { background: linear-gradient(90deg, var(--danger), #e7b45f); }
+  .hp-group { display: grid; gap: 3px; }
+  .hp-group b { color: #e7d9b8; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
   .pending { color: var(--amber); font-size: 12px; min-height: 16px; }
   .obj { font-size: 12px; color: #e7d9b8; border-left: 2px solid var(--amber); padding-left: 8px; margin: 4px 0; }
   .occ { color: var(--muted); font-size: 11px; }
@@ -101,16 +163,29 @@
   <section class="panel">
     <h2>Realm Map</h2>
     <div class="map-meta" id="map-meta"></div>
-    <div id="map-grid"></div>
+    <div id="map-stage">
+      <div id="map-grid"></div>
+      <canvas id="map-agents"></canvas>
+    </div>
     <div class="map-legend" id="map-legend">
-      <span>◆ you</span><span>teal edge: travel</span>
+      <span>◆ you</span><span>tiny sprites: NPCs</span><span>✦ plan update</span><span>teal edge: travel</span>
     </div>
   </section>
 
   <section class="panel right">
+    <div id="planner-wrap">
+      <h2>Gemma Planner</h2>
+      <div class="planner-controls">
+        <button class="act tiny" id="btn-profile-cerebras">1800 tk/s</button>
+        <button class="act tiny" id="btn-profile-slow50">50 tk/s sim</button>
+      </div>
+      <div id="planner-health"></div>
+    </div>
+
     <h2>Your Surroundings</h2>
     <div class="scene-pane">
       <canvas id="scene"></canvas>
+      <div id="result-card"></div>
       <div class="scene-cap">
         <div class="place" id="scene-place">—</div>
         <div class="tierbadge" id="scene-tier"></div>
@@ -118,21 +193,18 @@
     </div>
     <p class="flavor" id="scene-flavor"></p>
 
-    <h2>Objective</h2>
-    <div class="obj" id="objective">—</div>
-
-    <h2>Actions</h2>
-    <div class="pending" id="pending"></div>
-    <div class="actions" id="actions"></div>
-
-    <h2>Who's Here</h2>
-    <div class="occ" id="occupants"></div>
-
     <div id="tavern-wrap" style="display:none">
       <h2>🍺 Tavern — Party Finding</h2>
       <div class="party" id="party"></div>
       <div class="recruits" id="recruits"></div>
     </div>
+
+    <h2>Who's Here</h2>
+    <div class="occ" id="occupants"></div>
+
+    <h2>Actions</h2>
+    <div class="pending" id="pending"></div>
+    <div class="actions" id="actions"></div>
 
     <div id="dungeon-wrap" style="display:none">
       <h2>⚔ Dungeon</h2>
@@ -145,32 +217,361 @@
 </div>
 
 <script type="module">
+import { composeAvatar, composeEnemy } from "/avatar/lpc-avatar.js";
+
 const $ = (id) => document.getElementById(id);
 let token = null;
 let snap = null;
 let fullMap = null; // static overworld, fetched once
+let demoRun = null;
+let plannerDemo = null;
+let demoPending = false;
+let demoCommitStarted = false;
+let playbackStart = 0;
+let playbackKey = "";
+let lastFrameTs = 0;
+let mapLayoutVersion = 0;
+const mapNpcSprites = new Map();
+const mapPlanTicks = new Map();
+const mapCellRects = new Map();
 const nonce = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random())).slice(0, 24);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
 
 // tile type → map colour
 const TYPE_COLOR = {
   town: "#d8a657", city: "#c08a3e", dungeon: "#7a3b2e", ruins: "#5a4a6b",
   shrine: "#5f7a8c", road: "#6b6452", wilds: "#2c4a36",
 };
+const TERRAIN_GLYPH = {
+  village: "⌂", forge: "⚒", mine: "⌁", badlands: "◆", ruins: "▥", shrine: "✦",
+  road: "═", river: "≈", forest: "♣", woods: "♣", meadow: "·", hills: "▴", ridge: "▵", mire: "≈",
+};
+function tileGlyph(t) {
+  if (t.type === "town" || t.type === "city") return "⌂";
+  if (t.type === "dungeon") return t.terrain === "mine" ? "⌁" : t.terrain === "forge" ? "⚒" : "◆";
+  return TERRAIN_GLYPH[t.terrain] || TERRAIN_GLYPH[t.type] || "";
+}
+function tileBackground(t) {
+  const base = TYPE_COLOR[t.type] || "#2c4a36";
+  const terrain = t.terrain || t.type;
+  const patterns = {
+    village: `linear-gradient(135deg, rgba(255,235,164,.24) 0 20%, transparent 21% 100%), linear-gradient(45deg, transparent 0 44%, rgba(92,48,30,.45) 45% 56%, transparent 57% 100%), ${base}`,
+    forge: `radial-gradient(circle at 62% 38%, rgba(255,166,83,.65) 0 9%, transparent 10%), linear-gradient(135deg, rgba(55,37,28,.45) 0 50%, transparent 51%), ${base}`,
+    mine: `radial-gradient(circle at 40% 45%, rgba(230,230,255,.34) 0 8%, transparent 9%), linear-gradient(90deg, rgba(0,0,0,.24) 0 48%, transparent 49% 100%), ${base}`,
+    badlands: `linear-gradient(160deg, rgba(255,178,105,.18) 0 18%, transparent 19% 38%, rgba(0,0,0,.18) 39% 46%, transparent 47%), ${base}`,
+    forest: `radial-gradient(circle at 28% 30%, rgba(127,196,110,.48) 0 12%, transparent 13%), radial-gradient(circle at 70% 62%, rgba(102,165,88,.42) 0 14%, transparent 15%), ${base}`,
+    woods: `radial-gradient(circle at 32% 36%, rgba(108,176,92,.48) 0 13%, transparent 14%), radial-gradient(circle at 68% 42%, rgba(58,112,60,.45) 0 16%, transparent 17%), ${base}`,
+    meadow: `radial-gradient(circle at 35% 38%, rgba(231,216,116,.45) 0 5%, transparent 6%), radial-gradient(circle at 70% 66%, rgba(170,215,119,.38) 0 8%, transparent 9%), ${base}`,
+    road: `linear-gradient(90deg, transparent 0 30%, rgba(213,185,126,.48) 31% 69%, transparent 70%), ${base}`,
+    river: `linear-gradient(135deg, transparent 0 35%, rgba(118,166,190,.7) 36% 60%, transparent 61%), ${base}`,
+    ruins: `linear-gradient(90deg, rgba(0,0,0,.18) 0 18%, transparent 19% 48%, rgba(255,255,255,.12) 49% 62%, transparent 63%), ${base}`,
+    shrine: `radial-gradient(circle at 50% 42%, rgba(202,231,255,.55) 0 13%, transparent 14%), ${base}`,
+    hills: `linear-gradient(135deg, transparent 0 25%, rgba(220,190,128,.26) 26% 44%, transparent 45%), ${base}`,
+    ridge: `linear-gradient(135deg, rgba(0,0,0,.22) 0 24%, transparent 25% 52%, rgba(255,255,255,.12) 53% 65%, transparent 66%), ${base}`,
+    mire: `radial-gradient(ellipse at 55% 62%, rgba(93,126,112,.55) 0 20%, transparent 21%), ${base}`,
+  };
+  return patterns[terrain] || base;
+}
+
+const mapCv = $("map-agents");
+const mapCtx = mapCv.getContext("2d");
+function refreshMapCellRects() {
+  const stage = $("map-stage");
+  if (!stage) return;
+  const stageRect = stage.getBoundingClientRect();
+  mapCellRects.clear();
+  for (const cell of document.querySelectorAll(".map-cell[data-tile-id]")) {
+    const r = cell.getBoundingClientRect();
+    mapCellRects.set(cell.dataset.tileId, {
+      x: r.left - stageRect.left,
+      y: r.top - stageRect.top,
+      w: r.width,
+      h: r.height,
+    });
+  }
+}
+function fitMapCanvas() {
+  const r = $("map-stage").getBoundingClientRect();
+  mapCv.width = Math.max(1, Math.round(r.width));
+  mapCv.height = Math.max(1, Math.round(r.height));
+  mapLayoutVersion += 1;
+  refreshMapCellRects();
+}
+new ResizeObserver(fitMapCanvas).observe($("map-stage"));
+fitMapCanvas();
+
+const MAP_NPC_COLORS = {
+  adventurer: "#74d28f",
+  crafter: "#e6a44f",
+  bandit: "#d56f6f",
+  merchant: "#e4cf6b",
+  guard: "#7aa4e8",
+  scout: "#7fc4a5",
+  mystic: "#b68be8",
+  player: "#ffffff",
+};
+function mapTilePoint(tileId, actorId = "", slot = null) {
+  const tile = fullMap?.tiles?.[tileId];
+  if (!tile || !fullMap?.width || !fullMap?.height) return null;
+  const rect = mapCellRects.get(tileId);
+  const cw = rect?.w || (mapCv.width / fullMap.width);
+  const ch = rect?.h || (mapCv.height / fullMap.height);
+  const seed = hash(actorId || tileId);
+  const baseX = rect ? rect.x : tile.x * cw;
+  const baseY = rect ? rect.y : tile.y * ch;
+  const fx = 0.16 + ((seed & 0xff) / 255) * 0.68;
+  const fy = 0.24 + (((seed >>> 8) & 0xff) / 255) * 0.56;
+  const wobbleX = Math.sin((seed % 360) + performance.now() / 1800) * cw * 0.015;
+  const wobbleY = Math.cos((seed % 360) + performance.now() / 2100) * ch * 0.012;
+  return {
+    x: baseX + cw * fx + wobbleX,
+    y: baseY + ch * fy + wobbleY,
+    cw,
+    ch,
+  };
+}
+function plannerStaleRatio() {
+  if (!plannerDemo?.simulated) return 0;
+  return Math.max(0, Math.min(0.96, (plannerDemo.staleNpcs || 0) / Math.max(1, plannerDemo.activeNpcs || 1)));
+}
+function actorFrozenByPlanner(actor) {
+  if (!actor?.id || actor.id === "__player__") return false;
+  if (actor.plannerState === "stale" || actor.plannerState === "queued") return true;
+  const ratio = plannerStaleRatio();
+  if (ratio <= 0) return false;
+  return (hash(`${actor.id}:planner-freeze`) % 1000) < ratio * 1000;
+}
+function demoPartyTileId(npcId, info) {
+  if (!demoRun || demoRun.committed) return null;
+  const member = (demoRun.roster || []).find((r) => r.id === npcId && !r.isPlayer);
+  if (!member) return null;
+  if (info.stage === "combat" || info.stage === "results") return demoRun.targetTile?.id || null;
+  if (info.stage === "travel") {
+    const path = demoRun.travelPath || [];
+    return path[Math.max(0, Math.min(path.length - 1, info.stepIndex || 0))]?.id || demoRun.startTile?.id || null;
+  }
+  return demoRun.startTile?.id || null;
+}
+function mapNpcTargetTile(npc, info) {
+  return demoPartyTileId(npc.id, info) || npc.tileId;
+}
+function syncMapSprite(actor, tileId, ts, kind = "npc", slot = null) {
+  const point = mapTilePoint(tileId, actor.id, slot);
+  if (!point) return null;
+  const plannerFrozen = kind === "npc" && actorFrozenByPlanner(actor);
+  const plannerState = kind === "npc" ? actor.plannerState || null : null;
+  let s = mapNpcSprites.get(actor.id);
+  if (!s) {
+    s = {
+      id: actor.id,
+      x: point.x,
+      y: point.y,
+      fromX: point.x,
+      fromY: point.y,
+      toX: point.x,
+      toY: point.y,
+      startedAt: ts,
+      duration: 1,
+      tileId,
+      seed: hash(actor.id),
+      pulseUntil: 0,
+      plannerFrozen: false,
+      plannerState: null,
+      layoutVersion: mapLayoutVersion,
+    };
+    mapNpcSprites.set(actor.id, s);
+  }
+  if (s.layoutVersion !== mapLayoutVersion) {
+    s.x = point.x; s.y = point.y; s.fromX = point.x; s.fromY = point.y; s.toX = point.x; s.toY = point.y;
+    s.layoutVersion = mapLayoutVersion;
+  }
+  s.plannerFrozen = plannerFrozen;
+  s.plannerState = plannerState;
+  if (plannerFrozen) {
+    s.fromX = s.x;
+    s.fromY = s.y;
+    s.toX = s.x;
+    s.toY = s.y;
+    s.startedAt = ts;
+    s.duration = 1;
+    return s;
+  }
+  if (s.tileId !== tileId) {
+    s.fromX = s.x; s.fromY = s.y; s.toX = point.x; s.toY = point.y;
+    s.startedAt = ts;
+    s.duration = kind === "player" ? 1200 : 1900 + (s.seed % 900);
+    s.tileId = tileId;
+  } else {
+    s.toX = point.x; s.toY = point.y;
+  }
+  const plannedAt = Number(actor.plannedAtTick || 0);
+  if (kind === "npc" && plannedAt > 0 && mapPlanTicks.get(actor.id) !== plannedAt) {
+    const recent = Number(snap?.worldTick || 0) - plannedAt <= 2;
+    if (mapPlanTicks.has(actor.id) || recent) s.pulseUntil = ts + 2600;
+    mapPlanTicks.set(actor.id, plannedAt);
+  }
+  return s;
+}
+function drawTinyMapSprite(actor, sprite, ts, kind = "npc") {
+  const plannerState = kind === "npc" ? actor.plannerState || sprite.plannerState || null : null;
+  const failedPlan = plannerState === "stale";
+  const queuedPlan = plannerState === "queued";
+  const frozen = kind === "npc" && sprite.plannerFrozen;
+  const t = frozen ? 1 : Math.min(1, Math.max(0, (ts - sprite.startedAt) / Math.max(1, sprite.duration)));
+  if (!frozen) {
+    const eased = 0.5 - Math.cos(t * Math.PI) / 2;
+    sprite.x = sprite.fromX + (sprite.toX - sprite.fromX) * eased;
+    sprite.y = sprite.fromY + (sprite.toY - sprite.fromY) * eased;
+  }
+  const moving = !frozen && t < 1 && (Math.abs(sprite.fromX - sprite.toX) + Math.abs(sprite.fromY - sprite.toY)) > 1;
+  const bob = frozen ? 0 : moving ? Math.sin(ts / 95 + sprite.seed) * 1.6 : Math.sin(ts / 700 + sprite.seed) * 0.7;
+  const x = sprite.x;
+  const y = sprite.y + bob;
+  const planPulse = kind === "npc" && !frozen && sprite.pulseUntil > ts;
+  const color = failedPlan ? "#d77474" : queuedPlan ? "#d8a657" : frozen ? "#7f8780" : kind === "player" ? MAP_NPC_COLORS.player : MAP_NPC_COLORS[actor.archetype] || "#d0ded6";
+  mapCtx.save();
+  mapCtx.translate(Math.round(x), Math.round(y));
+  if (frozen) {
+    const p = (Math.sin(ts / 180 + sprite.seed) + 1) / 2;
+    mapCtx.globalAlpha = 0.58 + p * 0.24;
+    mapCtx.strokeStyle = failedPlan ? "#ff3f5f" : queuedPlan ? "#d8a657" : "#d77474";
+    mapCtx.lineWidth = 1.5;
+    mapCtx.strokeRect(-6, -16, 12, 24);
+    if (failedPlan) {
+      mapCtx.globalAlpha = 1;
+      mapCtx.fillStyle = "#ff3f5f";
+      mapCtx.beginPath();
+      mapCtx.arc(0, -22, 6, 0, Math.PI * 2);
+      mapCtx.fill();
+      mapCtx.fillStyle = "#22070b";
+      mapCtx.font = "bold 10px system-ui";
+      mapCtx.textAlign = "center";
+      mapCtx.fillText("!", 0, -18);
+      mapCtx.strokeStyle = "rgba(255,63,95,.82)";
+      mapCtx.beginPath();
+      mapCtx.moveTo(-7, -5);
+      mapCtx.lineTo(7, 7);
+      mapCtx.moveTo(7, -5);
+      mapCtx.lineTo(-7, 7);
+      mapCtx.stroke();
+    } else {
+      mapCtx.fillStyle = queuedPlan ? "#f1c15f" : "#ff9a8a";
+      mapCtx.fillRect(-4, -14, 2, 8);
+      mapCtx.fillRect(2, -14, 2, 8);
+    }
+    mapCtx.globalAlpha = 1;
+  }
+  if (planPulse) {
+    const p = 1 - (sprite.pulseUntil - ts) / 2600;
+    mapCtx.globalAlpha = Math.max(0, 1 - p);
+    mapCtx.strokeStyle = actor.planSource === "gemma" ? "#b68be8" : "#f3d36b";
+    mapCtx.lineWidth = 1.5;
+    mapCtx.beginPath();
+    mapCtx.arc(0, -7, 5 + p * 11, 0, Math.PI * 2);
+    mapCtx.stroke();
+    mapCtx.globalAlpha = 1;
+    mapCtx.fillStyle = actor.planSource === "gemma" ? "#d9b4ff" : "#ffe38a";
+    mapCtx.font = "10px system-ui";
+    mapCtx.fillText("✦", -3, -15);
+  }
+  mapCtx.fillStyle = "rgba(0,0,0,.38)";
+  mapCtx.fillRect(-3, 4, 7, 2);
+  mapCtx.fillStyle = color;
+  mapCtx.fillRect(-2, -5, 5, 8);
+  mapCtx.fillStyle = kind === "player" ? "#7fc4a5" : "#f2d3a6";
+  mapCtx.fillRect(-2, -9, 5, 4);
+  mapCtx.fillStyle = moving ? "#111" : "rgba(0,0,0,.55)";
+  mapCtx.fillRect(moving ? -4 : -3, 2, 2, 5);
+  mapCtx.fillRect(moving ? 2 : 1, 2, 2, 5);
+  if (kind === "player") {
+    mapCtx.strokeStyle = "#7fc4a5";
+    mapCtx.strokeRect(-4, -11, 9, 19);
+  }
+  mapCtx.restore();
+}
+function drawMapAgents(ts, info = playbackInfo(ts)) {
+  if (!fullMap?.tiles || !snap?.worldMap) return;
+  mapCtx.clearRect(0, 0, mapCv.width, mapCv.height);
+  if (plannerDemo?.simulated) {
+    mapCtx.save();
+    mapCtx.fillStyle = "rgba(20,5,5,.82)";
+    mapCtx.fillRect(8, 8, Math.min(310, mapCv.width - 16), 32);
+    mapCtx.strokeStyle = "rgba(215,116,116,.62)";
+    mapCtx.strokeRect(8.5, 8.5, Math.min(310, mapCv.width - 16), 32);
+    mapCtx.fillStyle = "#ffb0a6";
+    mapCtx.font = "bold 11px system-ui";
+    mapCtx.fillText(`MODEL A: ${plannerDemo.staleNpcs || 0} LOGIC CYCLES FAILED · ${plannerDemo.queueDepth || 0} queued`, 18, 28);
+    mapCtx.restore();
+  }
+  const active = new Set();
+  const npcs = snap.worldMap.npcs || [];
+  const mapped = npcs.map((npc) => ({ npc, tileId: mapNpcTargetTile(npc, info) })).filter((x) => x.tileId);
+  for (const { npc, tileId } of mapped) {
+    const sprite = syncMapSprite(npc, tileId, ts, "npc");
+    if (!sprite) continue;
+    active.add(npc.id);
+    drawTinyMapSprite(npc, sprite, ts);
+  }
+  const playerTileId = currentDisplayTileId(info);
+  const player = { id: "__player__", archetype: "player", plannedAtTick: 0 };
+  const playerSprite = syncMapSprite(player, playerTileId, ts, "player");
+  if (playerSprite) {
+    active.add(player.id);
+    drawTinyMapSprite(player, playerSprite, ts, "player");
+  }
+  for (const id of mapNpcSprites.keys()) {
+    if (!active.has(id)) mapNpcSprites.delete(id);
+  }
+}
 
 async function boot() {
   try {
-    const [pt, mp] = await Promise.all([
+    const [pt, mp, ph] = await Promise.all([
       fetch("/api/sigmacraft/playtest", { method: "POST" }).then(r => r.json()),
       fetch("/api/sigmacraft/map").then(r => r.json()),
+      fetch("/api/sigmacraft/demo/throughput").then(r => r.json()),
     ]);
     token = pt.token; snap = pt.snapshot; fullMap = mp.map;
+    plannerDemo = ph.planner || null;
     $("hdr-who").textContent = `playtest · ${token.slice(-6)}`;
     render();
     setInterval(refresh, 1500);
+    setInterval(refreshPlannerDemo, 1500);
   } catch { $("hdr-meta").textContent = "failed to reach the realm"; }
+}
+async function refreshPlannerDemo() {
+  try {
+    const j = await (await fetch("/api/sigmacraft/demo/throughput")).json();
+    if (j.ok) {
+      plannerDemo = j.planner || plannerDemo;
+      render_planner();
+      render_map();
+    }
+  } catch { /* transient */ }
+}
+async function setPlannerProfile(profile) {
+  if (demoRun && !demoRun.committed) {
+    $("pending").textContent = "finish or reset the staged party run before changing planner speed";
+    return;
+  }
+  try {
+    const j = await (await fetch("/api/sigmacraft/demo/throughput", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ profile }),
+    })).json();
+    if (j.ok) {
+      plannerDemo = j.planner || plannerDemo;
+      render_planner();
+      render_map();
+    }
+  } catch {
+    $("pending").textContent = "planner speed toggle failed";
+  }
 }
 async function refresh() {
   if (!token) return;
+  if (demoRun && !demoRun.committed) return;
   try {
     const j = await (await fetch(`/api/sigmacraft/snapshot?token=${encodeURIComponent(token)}`)).json();
     if (j.ok) { snap = j.snapshot; render(); }
@@ -178,6 +579,7 @@ async function refresh() {
 }
 async function act(intent) {
   if (!token) return;
+  demoRun = null;
   $("pending").textContent = `… ${intent.kind}${intent.targetId ? " → " + intent.targetId : ""} (resolving next tick)`;
   try {
     await fetch("/api/sigmacraft/intent", {
@@ -186,6 +588,80 @@ async function act(intent) {
     });
     setTimeout(refresh, 600);
   } catch { /* ignore */ }
+}
+
+async function beginPartyRun() {
+  if (!token || demoPending) return;
+  demoPending = true;
+  demoCommitStarted = false;
+  demoRun = null;
+  playbackStart = performance.now();
+  playbackKey = "";
+  $("pending").textContent = "posting the tavern notice…";
+  render();
+  try {
+    const j = await (await fetch("/api/sigmacraft/demo/party-run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    })).json();
+    if (j.ok) {
+      demoRun = j;
+      demoRun.committed = false;
+      plannerDemo = j.plannerDemo || plannerDemo;
+      snap = j.snapshot || snap;
+      playbackStart = performance.now();
+      $("pending").textContent = "";
+    } else {
+      $("pending").textContent = `party run: ${j.error || "failed"}`;
+    }
+  } catch {
+    $("pending").textContent = "party run failed to reach the server";
+  } finally {
+    demoPending = false;
+    render();
+  }
+}
+
+async function commitPartyRun() {
+  if (!token || !demoRun || demoRun.committed || demoCommitStarted) return;
+  demoCommitStarted = true;
+  try {
+    const j = await (await fetch("/api/sigmacraft/demo/party-run/commit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, runId: demoRun.runId }),
+    })).json();
+    if (j.ok) {
+      demoRun.committed = true;
+      snap = j.snapshot || snap;
+      render();
+    } else {
+      $("pending").textContent = `party commit: ${j.error || "failed"}`;
+    }
+  } catch {
+    $("pending").textContent = "party result failed to commit";
+  }
+}
+async function queueDisband() {
+  if (!token) return;
+  try {
+    await fetch("/api/sigmacraft/intent", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, intent: { kind: "disband", nonce: nonce() } }),
+    });
+    setTimeout(refresh, 700);
+  } catch { /* best effort */ }
+}
+function resetPartyDemo() {
+  demoRun = null;
+  demoCommitStarted = false;
+  playbackKey = "";
+  document.body.classList.remove("dungeon-focus");
+  $("result-card").classList.remove("show");
+  render();
+  queueDisband();
+  setTimeout(refresh, 100);
 }
 
 // tier -> palette
@@ -203,30 +679,48 @@ const pal = () => TIER[tierOf(snap?.place?.danger)];
 
 // ── world map: the full overworld tile grid ─────────────────────────────────
 let legendDrawn = false;
+function currentDisplayTileId(info = playbackInfo(lastFrameTs || performance.now())) {
+  if (!demoRun || demoRun.committed) return snap?.place?.id;
+  if (info.stage === "travel") {
+    const path = demoRun.travelPath || [];
+    const idx = Math.max(0, Math.min(path.length - 1, info.stepIndex ?? 0));
+    return path[idx]?.id || demoRun.startTile?.id || snap?.place?.id;
+  }
+  if (info.stage === "combat" || info.stage === "results") return demoRun.targetTile?.id || snap?.place?.id;
+  return demoRun.startTile?.id || snap?.place?.id;
+}
 function render_map() {
   if (!fullMap?.tiles) return;
   const grid = $("map-grid");
   grid.style.gridTemplateColumns = `repeat(${fullMap.width}, 1fr)`;
   const reach = new Set((snap?.validActions || []).filter(a => a.kind === "move").map(a => a.targetId));
-  const curId = snap?.place?.id;
+  const info = playbackInfo(lastFrameTs || performance.now());
+  const curId = currentDisplayTileId(info);
   // live npcCounts for the windowed neighbourhood (the rest show 0)
   const counts = {};
   for (const c of (snap?.worldMap?.cells || [])) counts[c.id] = c.npcCount;
   const tiles = Object.values(fullMap.tiles).sort((a, b) => a.y - b.y || a.x - b.x);
-  $("map-meta").textContent = `${tiles.length} tiles · ${(snap?.occupants || []).length} here with you`;
+  const npcCount = (snap?.worldMap?.npcs || []).length;
+  const plannerLine = plannerDemo?.simulated
+    ? `${plannerDemo.staleNpcs || 0}/${plannerDemo.activeNpcs || npcCount} NPC planners frozen by Model A`
+    : `${npcCount} NPCs moving`;
+  $("map-meta").textContent = `${tiles.length} tiles · ${plannerLine} · ${(snap?.occupants || []).length} here with you`;
   grid.innerHTML = "";
   for (const t of tiles) {
     const cell = document.createElement("div");
-    const reachable = reach.has(t.id);
+    const reachable = !demoRun && reach.has(t.id);
     const current = t.id === curId;
     cell.className = "map-cell" + (current ? " current" : "") + (reachable ? " exit" : "");
-    cell.style.background = TYPE_COLOR[t.type] || "#2c4a36";
+    cell.dataset.tileId = t.id;
+    cell.style.background = tileBackground(t);
     cell.title = `${t.name} · ${t.type} · danger ${t.danger}`;
     const n = counts[t.id] || 0;
-    cell.innerHTML = (current ? `<span class="pin">◆</span>` : "") + (n > 0 ? `<span class="cnt">${n > 9 ? "9+" : n}</span>` : "");
+    cell.innerHTML = `<span class="glyph">${tileGlyph(t)}</span>` + (current ? `<span class="pin">◆</span>` : "") + (n > 0 ? `<span class="cnt">${n > 9 ? "9+" : n}</span>` : "");
     if (reachable) cell.onclick = () => act({ kind: "move", targetId: t.id });
     grid.appendChild(cell);
   }
+  refreshMapCellRects();
+  requestAnimationFrame(refreshMapCellRects);
   if (!legendDrawn) {
     const lg = $("map-legend");
     for (const [type, col] of Object.entries(TYPE_COLOR)) {
@@ -238,25 +732,19 @@ function render_map() {
 
 // ── actions / events / surroundings ─────────────────────────────────────────
 function render_side() {
-  $("objective").textContent = snap?.objective?.title
-    ? `${snap.objective.title} — ${snap.objective.prompt || ""}` : "wander and witness the realm.";
   const wrap = $("actions"); wrap.innerHTML = "";
+  const runningDemo = !!(demoRun && !demoRun.committed);
   for (const a of (snap?.validActions || [])) {
     const b = document.createElement("button");
-    b.className = "act" + (a.kind === "rest" ? " rest" : "");
-    b.textContent = a.label || a.kind;
+    b.className = "act" + (a.kind === "rest" ? " rest" : a.kind === "talk" ? " talk" : "");
+    b.textContent = a.kind === "talk" && (snap?.occupants || []).length ? `Talk with the locals (${(snap.occupants || []).length})` : a.label || a.kind;
+    b.disabled = runningDemo;
     b.onclick = () => act({ kind: a.kind, targetId: a.targetId });
     wrap.appendChild(b);
   }
   const occ = snap?.occupants || [];
-  if (occ.length) {
-    const talk = document.createElement("button");
-    talk.className = "act talk"; talk.textContent = `Talk with the locals (${occ.length})`;
-    talk.onclick = () => act({ kind: "talk" });
-    wrap.appendChild(talk);
-  }
   $("occupants").innerHTML = occ.length
-    ? occ.map(o => `<b>${o.name}</b>${o.kind === "npc" && o.faction ? ` <span class="dim">(${o.faction})</span>` : ""}`).join(", ")
+    ? occ.map(o => `<b>${esc(o.name)}</b>${o.kind === "npc" && o.faction ? ` <span class="dim">(${esc(o.faction)})</span>` : ""}`).join(", ")
     : '<span class="dim">no one else is here.</span>';
   render_tavern();
   render_dungeon();
@@ -264,80 +752,164 @@ function render_side() {
     ? `… ${snap.pendingIntent.kind}${snap.pendingIntent.targetId ? " → " + snap.pendingIntent.targetId : ""} (queued)` : "";
   const evs = (snap?.recentEvents || []).slice().reverse();
   $("events").innerHTML = evs.length
-    ? evs.map(e => `<li><span class="t">t${e.tick}</span>${e.text}</li>`).join("")
+    ? evs.map(e => `<li><span class="t">t${e.tick}</span>${esc(e.text)}</li>`).join("")
     : '<li class="dim">the realm is quiet…</li>';
 }
 
-// Tavern: only at a safe town/city. Recruit co-located NPCs into your party,
-// see the roster, then (once we journey) head out to a dungeon.
+function render_planner() {
+  const p = plannerDemo;
+  const health = $("planner-health");
+  const fast = $("btn-profile-cerebras");
+  const slow = $("btn-profile-slow50");
+  const runningDemo = !!(demoRun && !demoRun.committed);
+  if (fast) {
+    fast.classList.toggle("active", p?.profile === "cerebras");
+    fast.disabled = runningDemo;
+    fast.onclick = () => setPlannerProfile("cerebras");
+  }
+  if (slow) {
+    slow.classList.toggle("active", p?.profile === "slow50");
+    slow.disabled = runningDemo;
+    slow.onclick = () => setPlannerProfile("slow50");
+  }
+  if (!health) return;
+  if (!p) {
+    health.innerHTML = `<div class="dim">waiting for planner telemetry…</div>`;
+    return;
+  }
+  const queuePct = Math.min(100, Math.round(((p.queueDepth || 0) / Math.max(1, p.activeNpcs || 1)) * 100));
+  const deadline = Math.round((p.partyDeadlineMs || 30000) / 1000);
+  const partyLine = p.partyFinderStalls
+    ? `Party finder stalls: fourth reply misses ${deadline}s deadline`
+    : `Party finder healthy: 4 replies inside ${deadline}s`;
+  health.innerHTML =
+    `<div class="planner-top"><b>${esc(p.label)}</b><span>${p.tokensPerSecond} tk/s</span></div>` +
+    `<div class="queuebar"><i style="width:${queuePct}%"></i></div>` +
+    `<div class="planner-grid">` +
+      `<div class="planner-metric ${p.queueDepth > 20 ? "bad" : "good"}"><span>queue</span><b>${p.queueDepth}</b></div>` +
+      `<div class="planner-metric ${p.staleNpcs > 20 ? "bad" : "good"}"><span>stale NPCs</span><b>${p.staleNpcs}/${p.activeNpcs}</b></div>` +
+      `<div class="planner-metric"><span>avg</span><b>${p.avgResponseMs}ms</b></div>` +
+      `<div class="planner-metric ${p.p95ResponseMs > 3000 ? "bad" : "good"}"><span>p95</span><b>${p.p95ResponseMs}ms</b></div>` +
+      `<div class="planner-metric ${p.capacityPer10s < p.demandPer10s ? "bad" : "good"}"><span>capacity</span><b>${p.capacityPer10s}/10s</b></div>` +
+      `<div class="planner-metric"><span>demand</span><b>${p.demandPer10s}/10s</b></div>` +
+      `<div class="planner-metric"><span>requested</span><b>${p.requestedJobs || 0}</b></div>` +
+      `<div class="planner-metric good"><span>completed</span><b>${p.completedJobs || 0}</b></div>` +
+      `<div class="planner-metric ${p.missedDeadlines ? "bad" : "good"}"><span>failed cycles</span><b>${p.missedDeadlines}</b></div>` +
+      `<div class="planner-metric"><span>tick</span><b>${(p.worldTickMs || 3000) / 1000}s</b></div>` +
+    `</div>` +
+    `<div class="planner-warning ${p.partyFinderStalls ? "bad" : "good"}">${partyLine}</div>`;
+}
+
+function visibleJoinDecisions(info = playbackInfo(lastFrameTs || performance.now())) {
+  if (!demoRun) return [];
+  return (demoRun.joinDecisions || [])
+    .filter((d) => d.accepted && Number.isFinite(d.joinAtMs) && (info.elapsed ?? 0) >= d.joinAtMs)
+    .slice(0, 4);
+}
+
+// Tavern: automated party finding for the playtest slice.
 function render_tavern() {
   const wrap = $("tavern-wrap");
   const inTown = snap?.place && (snap.place.type === "town" || snap.place.type === "city");
-  if (!inTown) { wrap.style.display = "none"; return; }
+  if (!inTown && !demoRun && !demoPending) { wrap.style.display = "none"; return; }
   wrap.style.display = "block";
-  const party = snap?.party;
-  const members = party?.members || [];
+  const info = playbackInfo(lastFrameTs || performance.now());
+  const joined = visibleJoinDecisions(info);
+  const members = demoRun ? joined.map((d) => ({ name: d.name, archetype: d.archetype })) : snap?.party?.members || [];
+  const accepted = joined;
+  const activeDemo = !!(demoRun && !demoRun.committed);
+  const stalled = info.stage === "stalled";
+  const unresolvedSlots = demoRun && (info.stage === "partyFind" || stalled) ? Math.max(0, 4 - joined.length) : 0;
+  const declined = (demoRun?.joinDecisions || []).filter((d) => !d.accepted && (info.elapsed ?? 0) > 12000).slice(0, 3);
   $("party").innerHTML =
-    `<div class="party-hd">Party (${members.length}/4)${party?.status && party.status !== "forming" ? ` · <span class="dim">${party.status}</span>` : ""}` +
-    (members.length ? ` <button class="act tiny" id="btn-disband">Disband</button>` : "") + `</div>` +
+    `<button class="act primary" id="btn-party-run" ${demoPending || activeDemo ? "disabled" : ""}>${demoPending ? "Finding party…" : "Begin party finding"}</button>` +
+    `<div class="party-hd" style="margin-top:7px">Party (${members.length}/4)${activeDemo ? ` · <span class="dim">${stalled ? "planner backlog" : "forming"}</span>` : snap?.party?.status && snap.party.status !== "forming" ? ` · <span class="dim">${esc(snap.party.status)}</span>` : ""}` +
+    (members.length && !demoRun ? ` <button class="act tiny" id="btn-disband">Disband</button>` : "") +
+    (stalled ? ` <button class="act tiny" id="btn-reset-demo">Reset</button>` : "") + `</div>` +
     (members.length
-      ? `<ul class="party-list">` + members.map(m => `<li>⚔ <b>${m.name}</b> <span class="dim">${m.archetype || ""}</span></li>`).join("") + `</ul>`
-      : `<div class="dim">No party yet — recruit some locals below.</div>`);
-  if (members.length) $("btn-disband").onclick = () => act({ kind: "disband" });
+      ? `<ul class="party-list">` + members.map(m => `<li><b>${esc(m.name)}</b> <span class="dim">${esc(m.archetype || "")}</span></li>`).join("") + `</ul>`
+      : `<div class="dim">${demoRun ? "The notice is up. People are thinking it over." : "The tavern board is waiting."}</div>`);
+  $("btn-party-run").onclick = beginPartyRun;
+  const disband = $("btn-disband");
+  if (disband) disband.onclick = () => act({ kind: "disband" });
+  const reset = $("btn-reset-demo");
+  if (reset) reset.onclick = resetPartyDemo;
 
-  const recruits = (snap?.occupants || []).filter(o => o.kind === "npc" && o.recruitable);
-  $("recruits").innerHTML = recruits.length
-    ? `<div class="dim" style="margin:.4rem 0 .2rem">Available to hire:</div>` + recruits.map(o =>
-        `<button class="act recruit" data-id="${o.id}">+ ${o.name} <span class="dim">(${o.archetype || "?"})</span></button>`).join(" ")
-    : (members.length ? "" : `<div class="dim">No free hands here right now.</div>`);
-  for (const b of $("recruits").querySelectorAll("button.recruit")) {
-    b.onclick = () => act({ kind: "recruit", targetNpcId: b.dataset.id });
+  if (!demoRun) {
+    const locals = (snap?.occupants || []).filter(o => o.kind === "npc").slice(0, 6);
+    $("recruits").innerHTML = locals.length
+      ? `<div class="dim" style="margin:.4rem 0 .2rem">In the room:</div>` + locals.map(o => `<span class="decision">${esc(o.name)} <span class="dim">${esc(o.archetype || "")}</span></span>`).join(" ")
+      : "";
+    return;
   }
+
+  $("recruits").innerHTML =
+    `<div class="decision-grid">` +
+    accepted.map(d => `<div class="decision yes"><b>${esc(d.name)}</b>: "${esc(d.dialogue)}"</div>`).join("") +
+    Array.from({ length: Math.min(4, unresolvedSlots) }).map(() => `<div class="decision"><b>Someone nearby</b> <span class="dim">is weighing the offer…</span></div>`).join("") +
+    declined.map(d => `<div class="decision no"><b>${esc(d.name)}</b>: "${esc(d.dialogue)}"</div>`).join("") +
+    `</div>`;
 }
 
-// Dungeon: only at a dungeon tile. Delve with your party — a turn-based, scaled
-// encounter; the leader keeps the loot. Renders the combat log + loot afterward.
-let lastCombat = null;
+// Dungeon: automated wave playback from the server-resolved party run.
 function render_dungeon() {
   const wrap = $("dungeon-wrap");
-  if (snap?.place?.type !== "dungeon") { wrap.style.display = "none"; return; }
+  if (snap?.place?.type !== "dungeon" && !demoRun) { wrap.style.display = "none"; return; }
+  const info = playbackInfo(lastFrameTs || performance.now());
+  if (demoRun && info.stage !== "combat" && info.stage !== "results") {
+    wrap.style.display = "none";
+    return;
+  }
   wrap.style.display = "block";
-  const psize = 1 + (snap?.party?.members?.length || 0);
-  let html = `<div class="dim">You stand at the mouth of <b>${snap.place.name}</b> — danger ${snap.place.danger ?? "?"}.</div>` +
-    `<button class="act delve" id="btn-delve">⚔ Delve with your party of ${psize}</button>`;
-  if (lastCombat) html += render_combat(lastCombat);
-  $("dungeon-body").innerHTML = html;
-  $("btn-delve").onclick = delve;
+  if (!demoRun) {
+    $("dungeon-body").innerHTML = `<div class="dim">The party board in town starts the demo run.</div>`;
+    return;
+  }
+  $("dungeon-body").innerHTML = render_combat(demoRun);
 }
 function render_combat(c) {
-  const oc = c.outcome === "victory" ? "🏆 VICTORY" : c.outcome === "defeat" ? "💀 DEFEAT" : "⏳ TIMEOUT";
-  const survivors = (c.party || []).map(p => `${p.name}${p.alive ? "" : " ☠"}${p.fled ? " (fled)" : ""}`).join(", ");
+  const info = playbackInfo(lastFrameTs || performance.now());
+  const oc = info.stage === "results" ? (c.outcome === "victory" ? "VICTORY" : c.outcome === "defeat" ? "DEFEAT" : "TIMEOUT") : "DELVE IN PROGRESS";
+  const survivors = (c.party || []).map(p => `${esc(p.name)}${p.alive ? "" : " fallen"}${p.fled ? " (fled)" : ""}`).join(", ");
   const loot = (c.loot || []).length
-    ? c.loot.map(l => `<li>${l.fromBoss ? "👑 " : ""}<b>${l.item?.name || "loot"}</b> <span class="dim">${l.item?.rarity || ""}</span> → ${l.to}</li>`).join("")
+    ? c.loot.map(l => `<li>${l.fromBoss ? "boss " : ""}<b>${esc(l.item?.name || "loot")}</b> <span class="dim">${esc(l.item?.rarity || "")}</span> → ${esc(l.to)}</li>`).join("")
     : `<li class="dim">no loot</li>`;
-  const logLines = (c.log || []).map(e => {
-    if (e.kind === "dodge") return `<li class="dim">r${e.round} ${e.actor} → ${e.target}: dodged</li>`;
-    if (e.kind === "death") return `<li class="kill">r${e.round} ${e.target} falls!</li>`;
-    if (e.kind === "flee") return `<li class="dim">r${e.round} ${e.actor} flees the fight</li>`;
-    const tag = e.kind === "crit" ? "💥" : e.kind === "overload" ? "⚡" : "";
-    return `<li>r${e.round} ${e.actor} → ${e.target}: ${tag}${e.amount} <span class="dim">(${e.targetHp}hp)</span></li>`;
-  }).join("");
-  return `<div class="combat"><div class="combat-hd">${oc} · ${c.rounds} rounds · ${c.tile}</div>` +
+  const activeWave = info.waveIndex ?? -1;
+  const wavePills = (c.waves || []).map((w, i) =>
+    `<span class="wave-pill${i === activeWave ? " active" : ""}">${w.boss ? "Boss" : `Wave ${w.wave}`}</span>`
+  ).join("");
+  const wave = (c.waves || [])[Math.max(0, activeWave)] || c.waves?.[0] || null;
+  const shownLog = visibleWaveLog(wave, info);
+  const logLines = shownLog.map(e => `<li class="${e.kind === "death" ? "kill" : e.kind === "dodge" || e.kind === "flee" ? "dim" : ""}">${esc(eventText(e, c))}</li>`).join("");
+  const hp = renderHpStrip(c, wave, info);
+  return `<div class="combat"><div class="combat-hd">${oc} · ${c.rounds} rounds · ${esc(c.tile)}</div>` +
+    `<div class="wave-pills">${wavePills}</div>` +
     `<div class="combat-party">Party: ${survivors}</div>` +
+    hp +
     `<div class="combat-loot"><b>Loot</b><ul>${loot}</ul></div>` +
-    `<details><summary>Combat log (${(c.log || []).length} events)</summary><ul class="combat-log">${logLines}</ul></details></div>`;
+    `<ul class="combat-log">${logLines || '<li class="dim">steel waits in the dark…</li>'}</ul></div>`;
 }
-async function delve() {
-  if (!token) return;
-  const b = $("btn-delve"); if (b) { b.disabled = true; b.textContent = "⚔ Delving…"; }
-  try {
-    const j = await (await fetch("/api/sigmacraft/delve", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }),
-    })).json();
-    lastCombat = j.ok ? j : null;
-    if (!j.ok) $("pending").textContent = `delve: ${j.error || "failed"}`;
-  } catch { /* transient */ }
-  await refresh();
+function hpStatus(state) {
+  if (state?.fled) return "fled";
+  if (state?.alive === false || (state?.hp || 0) <= 0) return "down";
+  return `${Math.max(0, Math.round(state.hp || 0))}/${Math.max(1, Math.round(state.maxHp || state.hp || 1))}`;
+}
+function hpRow(state, cls = "") {
+  const pct = hpPct(state);
+  return `<div class="hp-row ${cls}"><span>${esc(state.name || state.id)}</span><span class="bar"><i style="width:${pct}%"></i></span><span>${esc(hpStatus(state))}</span></div>`;
+}
+function renderHpStrip(c, wave, info) {
+  const visible = visibleWaveState(c, wave, info);
+  const partyById = new Map(visible.party.map((p) => [p.id, p]));
+  const partyRows = (c.roster || []).slice(0, 5)
+    .map((r) => partyById.get(r.id) || withMaxHp((c.party || []).find((p) => p.id === r.id) || { id: r.id, name: r.name, hp: 1, maxHp: 1 }))
+    .map((p) => hpRow(p))
+    .join("");
+  const enemyRows = visible.enemies.map((e) => hpRow(e, "enemy")).join("");
+  return `<div class="hp-strip">` +
+    `<div class="hp-group"><b>Party HP</b>${partyRows || '<div class="dim">No party members.</div>'}</div>` +
+    `<div class="hp-group"><b>Enemy HP</b>${enemyRows || '<div class="dim">No enemies visible.</div>'}</div>` +
+    `</div>`;
 }
 
 function render() {
@@ -349,12 +921,12 @@ function render() {
   tb.textContent = snap?.place?.safe ? `${ty} · SAFE` : `${ty} · DANGER ${snap?.place?.danger ?? 1}`;
   tb.style.background = snap?.place?.safe ? "rgba(127,196,165,.2)" : "rgba(215,116,116,.2)";
   tb.style.color = snap?.place?.safe ? "var(--teal)" : "var(--danger)";
+  render_planner();
   render_map();
   render_side();
 }
 
-// ── small side-scroller: STATIC at rest, scrolls only while travelling.
-//    No other characters are drawn — it is the player's own first-person zone view.
+// ── side-scroller scene: tavern -> road -> dungeon wave playback ─────────────
 const cv = $("scene"), ctx = cv.getContext("2d");
 let scrollX = 0;
 function fit() {
@@ -364,60 +936,531 @@ function fit() {
 new ResizeObserver(fit).observe(cv.parentElement);
 fit();
 
-function drawScene(ts) {
-  const p = pal(), W = cv.width, H = cv.height, groundY = H * 0.78;
-  const traveling = !!snap?.pendingIntent;
-  if (traveling) scrollX += 3.2;             // motion ONLY while travelling
-  const sx = traveling ? scrollX : 0;        // at rest the scene is still
-
-  // sky
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, p.sky[0]); g.addColorStop(1, p.sky[1]);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  // glow
-  ctx.save(); ctx.globalAlpha = .5;
-  const rg = ctx.createRadialGradient(W * 0.78, H * 0.2, 6, W * 0.78, H * 0.2, 110);
-  rg.addColorStop(0, p.glow); rg.addColorStop(1, "transparent");
-  ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H); ctx.restore();
-  // parallax hills (frozen unless travelling)
-  for (let layer = 0; layer < 2; layer++) {
-    const off = (sx * (0.2 + layer * 0.3)) % (W + 200);
-    const baseY = groundY - 18 - layer * 20;
-    ctx.fillStyle = layer === 1 ? p.ground : p.hill; ctx.globalAlpha = 0.7 + layer * 0.2;
-    for (let bx = -200; bx < W + 200; bx += 200) {
-      const x = bx - off;
-      ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x, baseY);
-      ctx.quadraticCurveTo(x + 50, baseY - 34 - layer * 6, x + 100, baseY);
-      ctx.quadraticCurveTo(x + 150, baseY + 22, x + 200, baseY);
-      ctx.lineTo(x + 200, H); ctx.closePath(); ctx.fill();
-    }
-  }
-  ctx.globalAlpha = 1;
-  // static danger hint (fixed, faint, not "walking with you") — scaled by danger
-  const danger = snap?.place?.danger ?? 1;
-  if (danger >= 3) {
-    ctx.save(); ctx.globalAlpha = .14; ctx.fillStyle = "#000";
-    for (let i = 0; i < Math.min(2, danger - 2); i++) {
-      const ex = W * (0.62 + i * 0.16);
-      ctx.beginPath(); ctx.ellipse(ex, groundY - 6, 7, 12, 0, 0, 7); ctx.fill();
-    }
-    ctx.restore();
-  }
-  // ground
-  ctx.fillStyle = p.ground; ctx.fillRect(0, groundY, W, H - groundY);
-  // the player only — gentle idle bob (breathing), no travel unless pending
-  const bob = Math.sin(ts / 520) * 1.8;
-  const px = W * 0.22, py = groundY + bob, scale = 1.0, h = 42 * scale;
-  ctx.save(); ctx.translate(px, py);
-  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(0, 3, 12, 3.5, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = "#e7eee9";
-  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.lineTo(6, -h * .7); ctx.lineTo(-6, -h * .7); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.arc(0, -h * .82, 6, 0, 7); ctx.fill();
-  ctx.fillStyle = "rgba(236,242,237,.85)"; ctx.font = "10px system-ui"; ctx.textAlign = "center";
-  ctx.fillText("You", 0, -h - 5);
+const HAIRS = ["short", "bob", "ponytail", "spiky", "curly", "braid", "swoop", "bedhead"];
+const SKINS = ["pale", "fair", "tan", "olive", "brown", "deep"];
+const HAIR_COLORS = ["black", "brown", "auburn", "ginger", "silver", "blonde"];
+const ARCH_STYLE = {
+  player: { shirt: "teal", pants: "navy", weapon: "sword", hat: "bare" },
+  adventurer: { shirt: "green", pants: "brown", weapon: "sword", hat: "headband" },
+  guard: { shirt: "blue", pants: "slate", weapon: "spear", hat: "legion" },
+  scout: { shirt: "mint", pants: "brown", weapon: "bow", hat: "hood" },
+  mystic: { shirt: "purple", pants: "navy", weapon: "staff", hat: "wizard" },
+  crafter: { shirt: "orange", pants: "brown", weapon: "hammer", hat: "cap" },
+  merchant: { shirt: "gold", pants: "maroon", weapon: "dagger", hat: "tophat" },
+  bandit: { shirt: "maroon", pants: "charcoal", weapon: "dagger", hat: "beanie" },
+};
+function hash(str) {
+  let h = 0x811c9dc5;
+  for (const ch of String(str || "x")) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+function pick(list, seed, salt = 0) { return list[(seed + salt) % list.length]; }
+function petFor(entity, facing = 1, moving = false) {
+  const seed = hash(entity?.id || entity?.npcId || entity?.name || "player");
+  const arch = String(entity?.archetype || (entity?.isPlayer ? "player" : "adventurer")).toLowerCase();
+  const style = ARCH_STYLE[arch] || ARCH_STYLE.adventurer;
+  return {
+    id: entity?.id || entity?.npcId || "player",
+    name: entity?.name || "Playtester",
+    seed,
+    weapon: { family: style.weapon, rarity: entity?.isPlayer ? "rare" : "common" },
+    cosmetics: {
+      c_skin: pick(SKINS, seed, 1),
+      c_hair: pick(HAIR_COLORS, seed, 5),
+      c_shirt: style.shirt,
+      c_pants: style.pants,
+      hair_style: pick(HAIRS, seed, 9),
+      hat_style: style.hat,
+      eyebrows: seed % 2 ? "thick" : "thin",
+    },
+    _motion: { facing, vx: moving ? facing * 2 : 0, dir: facing < 0 ? "left" : "right" },
+    run: { alive: true, gear: { weapon: { family: style.weapon, rarity: "common" } } },
+  };
+}
+function drawLabel(text, x, y) {
+  ctx.save();
+  ctx.font = "10px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(0,0,0,.5)";
+  ctx.fillRect(x - ctx.measureText(text).width / 2 - 4, y - 9, ctx.measureText(text).width + 8, 12);
+  ctx.fillStyle = "#f5f0df";
+  ctx.fillText(text, x, y);
   ctx.restore();
 }
-function frame(ts) { drawScene(ts); requestAnimationFrame(frame); }
+function drawBubble(text, x, y, maxW = 170) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  ctx.save();
+  ctx.font = "11px system-ui";
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width > maxW - 16 && line) {
+      lines.push(line);
+      line = w;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  const h = 16 + lines.length * 13;
+  const left = Math.max(8, Math.min(cv.width - maxW - 8, x - maxW / 2));
+  const top = Math.max(8, y - h);
+  ctx.fillStyle = "rgba(7,10,8,.86)";
+  ctx.strokeStyle = "rgba(255,255,255,.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(left, top, maxW, h, 7);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#f1ead8";
+  lines.slice(0, 4).forEach((l, i) => ctx.fillText(l, left + 8, top + 17 + i * 13));
+  ctx.restore();
+}
+function stageDurations() {
+  const partyFind = demoRun?.timeline?.partyFindMs || 30000;
+  const travelStep = demoRun?.timeline?.travelStepMs || 1350;
+  const travel = Math.max(1200, ((demoRun?.travelPath || []).length || 1) * travelStep);
+  return { partyFind, travel, travelStep };
+}
+function waveDuration(wave) {
+  return 900 + Math.max(1, (wave?.log || []).length) * 360 + 900;
+}
+function playbackInfo(ts) {
+  if (demoPending) return { stage: "partyFind", elapsed: 0, joinReveal: 0, waveIndex: -1, eventIndex: -1, key: "pending" };
+  if (!demoRun) {
+    const pendingMove = snap?.pendingIntent?.kind === "move";
+    const stage = pendingMove ? "travel" : "idle";
+    return { stage, waveIndex: -1, eventIndex: -1, key: pendingMove ? `travel:${snap.pendingIntent.targetId || ""}` : `idle:${snap?.pendingIntent?.kind || ""}` };
+  }
+  const elapsed = Math.max(0, ts - playbackStart);
+  const d = stageDurations();
+  if (elapsed < d.partyFind) {
+    return { stage: "partyFind", elapsed, joinReveal: Math.floor(elapsed / 1000), waveIndex: -1, eventIndex: -1, key: `partyFind:${Math.floor(elapsed / 1000)}` };
+  }
+  if (demoRun?.plannerDemo?.partyFinderStalls) {
+    return { stage: "stalled", elapsed, joinReveal: Math.floor(elapsed / 1000), waveIndex: -1, eventIndex: -1, key: `stalled:${Math.floor(elapsed / 1000)}` };
+  }
+  if (elapsed < d.partyFind + d.travel) {
+    const travelElapsed = elapsed - d.partyFind;
+    const path = demoRun.travelPath || [];
+    const stepIndex = Math.max(0, Math.min(path.length - 1, Math.floor(travelElapsed / d.travelStep)));
+    return { stage: "travel", elapsed, travelElapsed, progress: travelElapsed / d.travel, stepIndex, waveIndex: -1, eventIndex: -1, key: `travel:${stepIndex}` };
+  }
+  let combatElapsed = elapsed - d.partyFind - d.travel;
+  const waves = demoRun.waves || [];
+  for (let i = 0; i < waves.length; i += 1) {
+    const events = waves[i].log || [];
+    const dur = waveDuration(waves[i]);
+    if (combatElapsed <= dur) {
+      const eventIndex = Math.max(-1, Math.min(events.length - 1, Math.floor((combatElapsed - 900) / 360)));
+      return { stage: "combat", elapsed, waveIndex: i, eventIndex, event: events[eventIndex] || null, key: `combat:${i}:${eventIndex}` };
+    }
+    combatElapsed -= dur;
+  }
+  return { stage: "results", elapsed, waveIndex: waves.length - 1, eventIndex: 999, key: `results:${demoRun.committed ? "committed" : "pending"}` };
+}
+function nameOf(id, run = demoRun) {
+  const roster = run?.roster || [];
+  const enemy = (run?.enemies || []).find(e => e.id === id) || (run?.waves || []).flatMap(w => w.enemies || []).find(e => e.id === id);
+  return roster.find(r => r.id === id)?.name || enemy?.name || id;
+}
+function eventText(e, run = demoRun) {
+  if (!e) return "";
+  if (e.kind === "dodge") return `r${e.round} ${nameOf(e.target, run)} dodges ${nameOf(e.actor, run)}`;
+  if (e.kind === "death") return `r${e.round} ${nameOf(e.target, run)} falls`;
+  if (e.kind === "flee") return `r${e.round} ${nameOf(e.actor, run)} flees`;
+  const verb = e.kind === "crit" ? "crits" : e.kind === "overload" ? "bursts" : "strikes";
+  return `r${e.round} ${nameOf(e.actor, run)} ${verb} ${nameOf(e.target, run)} for ${e.amount}`;
+}
+function visibleWaveLog(wave, info) {
+  if (!wave) return [];
+  const n = Math.max(0, Math.min((wave.log || []).length, (info.eventIndex ?? -1) + 1));
+  return (wave.log || []).slice(0, n);
+}
+function withMaxHp(state) {
+  const maxHp = Math.max(1, Math.round(state.maxHp || state.sheet?.maxHp || state.hp || 1));
+  return {
+    ...state,
+    hp: Math.max(0, Math.round(state.hp ?? maxHp)),
+    maxHp,
+    alive: state.alive !== false && (state.hp ?? maxHp) > 0,
+    fled: !!state.fled,
+  };
+}
+function applyVisibleEvents(states, events) {
+  const byId = new Map((states || []).map((s) => [s.id, withMaxHp(s)]));
+  for (const e of events || []) {
+    if (e.target && byId.has(e.target)) {
+      const target = byId.get(e.target);
+      if (Number.isFinite(e.targetHp)) target.hp = Math.max(0, Math.round(e.targetHp));
+      else if (Number.isFinite(e.amount)) target.hp = Math.max(0, target.hp - Math.round(e.amount));
+      target.alive = target.hp > 0;
+      if (e.kind === "death") {
+        target.hp = 0;
+        target.alive = false;
+      }
+    }
+    if (e.kind === "flee" && e.actor && byId.has(e.actor)) byId.get(e.actor).fled = true;
+  }
+  return [...byId.values()];
+}
+function visibleWaveState(run, wave, info) {
+  if (!wave) return { party: [], enemies: [] };
+  const events = visibleWaveLog(wave, info);
+  const partyStart = wave.startParty || (wave.party || run?.party || []).map((p) => ({ ...p, hp: p.maxHp || p.hp || 1, alive: true }));
+  const enemyStart = wave.startEnemies || (wave.enemies || []).map((e) => ({ ...e, hp: e.maxHp || e.hp || 1, alive: true }));
+  return {
+    party: applyVisibleEvents(partyStart, events),
+    enemies: applyVisibleEvents(enemyStart, events),
+  };
+}
+function hpPct(state) {
+  return Math.max(0, Math.min(100, Math.round(((state?.hp || 0) / Math.max(1, state?.maxHp || state?.hp || 1)) * 100)));
+}
+function renderResultCard() {
+  const card = $("result-card");
+  if (!demoRun) { card.classList.remove("show"); card.innerHTML = ""; return; }
+  const loot = (demoRun.loot || []).map((l) =>
+    `<div class="loot-card"><b>${esc(l.item?.name || "Loot")}</b><div class="dim">${esc(l.item?.rarity || "")}${l.fromBoss ? " · boss" : ""} → ${esc(l.to)}</div></div>`
+  ).join("");
+  const fallen = (demoRun.party || []).filter((p) => !p.alive || p.fled).map((p) => p.name).join(", ");
+  card.innerHTML =
+    `<div class="result-title">${demoRun.outcome === "victory" ? "VICTORY" : "RUN ENDED"}</div>` +
+    `<div class="combat-hd">${esc(demoRun.targetTile?.name || demoRun.tile)} · ${demoRun.rounds} rounds · boss ${demoRun.bossDead ? "defeated" : "survived"}</div>` +
+    `<div class="dim">${fallen ? `Complications: ${esc(fallen)}` : "Everyone made it through the boss fight."}</div>` +
+    `<div class="loot-grid">${loot || '<div class="loot-card dim">No loot recovered.</div>'}</div>` +
+    `<button class="act primary" id="btn-return-map" style="margin-top:12px;width:100%">Return to map</button>`;
+  card.classList.add("show");
+  const btn = $("btn-return-map");
+  if (btn) btn.onclick = () => {
+    demoRun = null;
+    demoCommitStarted = false;
+    document.body.classList.remove("dungeon-focus");
+    card.classList.remove("show");
+    render();
+    queueDisband();
+    setTimeout(refresh, 100);
+  };
+}
+function drawTavern(ts, info) {
+  const W = cv.width, H = cv.height, groundY = H * 0.79;
+  ctx.fillStyle = "#2b1d16"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#5a3625"; ctx.fillRect(0, H * 0.42, W, H * 0.38);
+  ctx.fillStyle = "#1b1110"; ctx.fillRect(0, groundY, W, H - groundY);
+  for (let x = -20; x < W + 40; x += 42) {
+    ctx.fillStyle = x % 84 ? "#2b1a13" : "#352116";
+    ctx.fillRect(x, groundY, 30, H - groundY);
+  }
+  ctx.fillStyle = "#7a4a2d"; ctx.fillRect(W * 0.56, H * 0.36, W * 0.36, 18);
+  ctx.fillStyle = "#3a2317"; ctx.fillRect(W * 0.58, H * 0.44, W * 0.31, H * 0.22);
+  ctx.fillStyle = "#f0bc5e"; ctx.fillRect(W * 0.12, H * 0.16, 42, 28);
+  ctx.fillStyle = "rgba(255,221,143,.28)"; ctx.fillRect(W * 0.12, H * 0.16, 42, 28);
+  ctx.fillStyle = "#1d1010"; ctx.fillRect(W * 0.08, groundY - 44, 52, 34);
+  ctx.fillStyle = "#e17b3f"; ctx.fillRect(W * 0.1, groundY - 27, 28, 17);
+  const roster = demoRun?.roster || [{ id: token || "player", name: "You", archetype: "player", isPlayer: true }];
+  composeAvatar(ctx, W * 0.24, groundY + Math.sin(ts / 380) * 1.5, petFor(roster[0], 1), ts, 0.72, "idle");
+  drawLabel("You", W * 0.24, groundY - 74);
+  const decisions = demoRun?.joinDecisions || (snap?.occupants || []).filter(o => o.kind === "npc").map(o => ({ ...o, npcId: o.id, accepted: false })).slice(0, 8);
+  if (demoRun) {
+    const joined = visibleJoinDecisions(info);
+    const hiddenSlots = Math.max(0, 4 - joined.length);
+    for (let i = 0; i < Math.min(4, hiddenSlots); i += 1) {
+      const x = W * (0.48 + i * 0.1) + Math.sin(ts / 520 + i) * 1.5;
+      const y = groundY - (i % 2) * 7;
+      composeAvatar(ctx, x, y, petFor({ id: `tavern_listener_${i}`, name: "Someone", archetype: "adventurer" }, i % 2 ? 1 : -1), ts, 0.52, "idle");
+      drawLabel("Listening...", x, y - 55);
+    }
+  }
+  decisions.slice(0, 8).forEach((d, i) => {
+    const accepted = !!d.accepted;
+    const due = !demoRun || !Number.isFinite(d.joinAtMs) || (info.elapsed ?? 0) >= d.joinAtMs;
+    const shown = !demoRun || (accepted && due) || (!accepted && (info.elapsed ?? 0) > 10000 + i * 1200);
+    if (!shown) return;
+    const x = W * (0.46 + (i % 4) * 0.1) + (accepted ? Math.sin(ts / 500 + i) * 2 : 0);
+    const y = groundY - (i >= 4 ? 10 : 0);
+    const pet = petFor({ id: d.npcId || d.id, name: d.name, archetype: d.archetype }, accepted ? -1 : 1);
+    composeAvatar(ctx, x, y, pet, ts, 0.58, accepted && due ? "walk" : "sit");
+    drawLabel(d.name || "NPC", x, y - 59);
+    if (demoRun && due && d.dialogue) drawBubble(d.dialogue, x, y - 72);
+  });
+}
+function drawRoad(ts, info) {
+  const W = cv.width, H = cv.height, groundY = H * 0.78;
+  scrollX += 3.4;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#24382f"); g.addColorStop(1, "#101912");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (let layer = 0; layer < 3; layer += 1) {
+    const off = (scrollX * (0.25 + layer * 0.22)) % 180;
+    ctx.fillStyle = ["#18281f", "#203629", "#2a4735"][layer];
+    for (let x = -180; x < W + 220; x += 180) {
+      ctx.beginPath();
+      ctx.moveTo(x - off, groundY);
+      ctx.lineTo(x + 55 - off, groundY - 44 - layer * 12);
+      ctx.lineTo(x + 120 - off, groundY);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.fillStyle = "#3d3324"; ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.fillStyle = "#5f5238";
+  for (let x = -80 - (scrollX % 80); x < W + 80; x += 80) ctx.fillRect(x, groundY + 18, 42, 4);
+  const roster = demoRun?.roster || [{ id: token || "player", name: "You", archetype: "player", isPlayer: true }];
+  roster.slice(0, 5).forEach((r, i) => {
+    const x = W * 0.23 - i * 22 + Math.sin(ts / 260 + i) * 2;
+    const y = groundY - (i % 2) * 8;
+    composeAvatar(ctx, x, y, petFor(r, 1, true), ts, 0.62, "walk");
+    drawLabel(i === 0 ? "You" : r.name, x, y - 60);
+  });
+}
+function drawFallbackEnemy(e, x, y, flash = false) {
+  ctx.save();
+  ctx.fillStyle = flash ? "#fff" : e?.isBoss ? "#6b1f1f" : "#394238";
+  ctx.beginPath(); ctx.ellipse(x, y - 28, e?.isBoss ? 25 : 15, e?.isBoss ? 34 : 22, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "#f6d47b"; ctx.fillRect(x - 8, y - 40, 4, 4); ctx.fillRect(x + 5, y - 40, 4, 4);
+  ctx.restore();
+}
+function drawCombatHpBar(state, x, y, width = 42, enemy = false) {
+  const pct = hpPct(state) / 100;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.62)";
+  ctx.fillRect(Math.round(x - width / 2), Math.round(y), width, 5);
+  ctx.fillStyle = enemy ? "#d77474" : "#7fc4a5";
+  ctx.fillRect(Math.round(x - width / 2), Math.round(y), Math.max(0, Math.round(width * pct)), 5);
+  ctx.strokeStyle = "rgba(255,255,255,.32)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(Math.round(x - width / 2) + 0.5, Math.round(y) + 0.5, width, 5);
+  ctx.restore();
+}
+function drawDefeatedMarker(x, y, width = 30) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,190,160,.72)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x - width / 2, y - 12);
+  ctx.lineTo(x + width / 2, y - 2);
+  ctx.moveTo(x + width / 2, y - 12);
+  ctx.lineTo(x - width / 2, y - 2);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawDamageCue(event, point, ts) {
+  if (!event || !point) return;
+  const color = event.kind === "crit" ? "#f7d06a" : event.kind === "overload" ? "#94e7ff" : "#ff8a72";
+  const pulse = (Math.sin(ts / 70) + 1) / 2;
+  const radius = point.radius + 8 + pulse * 4;
+  const y = point.y - point.hitOffset;
+  ctx.save();
+  ctx.translate(point.x, y);
+  ctx.globalAlpha = 0.86;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = event.kind === "strike" ? 2 : 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 0.72;
+  ctx.fillStyle = color;
+  for (let i = 0; i < 6; i += 1) {
+    const a = (i / 6) * Math.PI * 2 + ts / 190;
+    const r = radius + 4 + (i % 2) * 5;
+    ctx.fillRect(Math.cos(a) * r - 1, Math.sin(a) * r - 1, 3, 3);
+  }
+  if (event.amount) {
+    ctx.globalAlpha = 1;
+    ctx.font = "bold 15px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff5c7";
+    ctx.strokeStyle = "rgba(0,0,0,.65)";
+    ctx.lineWidth = 3;
+    const textY = -radius - 10 - Math.sin(ts / 110) * 4;
+    ctx.strokeText(String(event.amount), 0, textY);
+    ctx.fillText(String(event.amount), 0, textY);
+  }
+  ctx.restore();
+}
+function drawDungeon(ts, info) {
+  const W = cv.width, H = cv.height, groundY = H * 0.79;
+  ctx.fillStyle = "#151018"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#24182b"; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W * 0.15, H * 0.25); ctx.lineTo(W * 0.42, groundY); ctx.fill();
+  ctx.fillStyle = "#1e1724"; ctx.beginPath(); ctx.moveTo(W * 0.28, groundY); ctx.lineTo(W * 0.62, H * 0.18); ctx.lineTo(W, groundY); ctx.fill();
+  ctx.fillStyle = "#2c2430"; ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.fillStyle = "rgba(216,166,87,.18)"; ctx.beginPath(); ctx.ellipse(W * 0.5, groundY + 8, W * 0.45, 18, 0, 0, 7); ctx.fill();
+  const wave = (demoRun?.waves || [])[Math.max(0, info.waveIndex || 0)] || null;
+  const current = info.event || null;
+  const visible = visibleWaveState(demoRun, wave, info);
+  const partyStates = new Map(visible.party.map(p => [p.id, p]));
+  const enemyStates = new Map(visible.enemies.map(e => [e.id, e]));
+  const roster = demoRun?.roster || [];
+  const combatPoints = new Map();
+  roster.slice(0, 5).forEach((r, i) => {
+    const state = partyStates.get(r.id) || {};
+    const x = W * (0.18 + i * 0.065);
+    const y = groundY - (i % 2) * 9;
+    const anim = state.alive === false ? "sit" : current?.actor === r.id ? "slash" : current?.target === r.id ? "hurt" : "idle";
+    composeAvatar(ctx, x, y, petFor(r, 1), ts, 0.62, anim);
+    combatPoints.set(r.id, { x, y, radius: 18, hitOffset: 38 });
+    drawCombatHpBar(state, x, y - 54, 38, false);
+    drawLabel(i === 0 ? "You" : r.name, x, y - 59);
+  });
+  const enemies = wave?.enemies || [];
+  enemies.forEach((e, i) => {
+    const state = enemyStates.get(e.id) || withMaxHp(e);
+    const x = W * (0.68 + i * 0.09);
+    const y = groundY - (i % 2) * 10;
+    const hit = current?.target === e.id;
+    const defeated = state.alive === false || (state.hp || 0) <= 0;
+    const anim = defeated ? "idle" : current?.actor === e.id ? "slash" : hit ? "hurt" : "idle";
+    ctx.save();
+    if (defeated) ctx.globalAlpha = 0.38;
+    const drew = composeEnemy(ctx, x, y, e.lpc, anim, ts, e.isBoss ? 0.82 : 0.62, hit && !defeated, "left");
+    if (!drew) drawFallbackEnemy(e, x, y, hit && !defeated);
+    ctx.restore();
+    if (defeated) drawDefeatedMarker(x, y, e.isBoss ? 46 : 30);
+    combatPoints.set(e.id, { x, y, radius: e.isBoss ? 34 : 22, hitOffset: e.isBoss ? 48 : 34 });
+    drawCombatHpBar(state, x, y - (e.isBoss ? 80 : 54), e.isBoss ? 56 : 38, true);
+    drawLabel(e.name, x, y - (e.isBoss ? 88 : 60));
+  });
+  if (current) {
+    drawDamageCue(current, combatPoints.get(current.target), ts);
+  }
+  if (info.stage === "results") {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,.42)";
+    ctx.fillRect(0, H * 0.12, W, 54);
+    ctx.fillStyle = "#f5d37a";
+    ctx.font = "bold 24px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(demoRun?.bossDead ? "BOSS DEFEATED" : "FIGHT ENDED", W / 2, H * 0.12 + 34);
+    ctx.restore();
+  }
+}
+function drawTownScene(ts) {
+  const W = cv.width, H = cv.height, groundY = H * 0.8;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#273a35"); g.addColorStop(1, "#141b18");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#47513c"; ctx.fillRect(0, groundY - 34, W, 34);
+  const houses = [
+    [0.06, 0.44, 58, 48, "#8b5a34"],
+    [0.28, 0.38, 72, 58, "#6f4931"],
+    [0.58, 0.42, 64, 50, "#946237"],
+    [0.78, 0.36, 76, 62, "#7e5230"],
+  ];
+  for (const [px, py, w, h, col] of houses) {
+    const x = W * px, y = H * py;
+    ctx.fillStyle = "#4b211b"; ctx.beginPath(); ctx.moveTo(x - 7, y); ctx.lineTo(x + w / 2, y - 28); ctx.lineTo(x + w + 7, y); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = col; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#f0c36b"; ctx.fillRect(x + w * 0.18, y + h * 0.24, 10, 12);
+    ctx.fillStyle = "#2b1d16"; ctx.fillRect(x + w * 0.6, y + h * 0.42, 16, h * 0.58);
+  }
+  ctx.fillStyle = "#6d6044"; ctx.fillRect(0, groundY, W, H - groundY);
+  for (let x = -20; x < W + 20; x += 22) {
+    ctx.fillStyle = x % 44 ? "#7d7051" : "#5f543d";
+    ctx.fillRect(x, groundY + 3, 16, 5);
+  }
+  composeAvatar(ctx, W * 0.25, groundY, petFor({ id: token || "player", name: "You", archetype: "player", isPlayer: true }, 1), ts, 0.72, "idle");
+  drawLabel("You", W * 0.25, groundY - 72);
+  (snap?.occupants || []).filter(o => o.kind === "npc").slice(0, 4).forEach((o, i) => {
+    const x = W * (0.52 + i * 0.1);
+    const y = groundY - (i % 2) * 8;
+    composeAvatar(ctx, x, y, petFor(o, i % 2 ? 1 : -1), ts, 0.56, "idle");
+  });
+}
+function drawBiomeScene(ts) {
+  const W = cv.width, H = cv.height, groundY = H * 0.78;
+  const place = snap?.place || {};
+  const tile = fullMap?.tiles?.[place.id] || {};
+  const terrain = place.terrain || tile.terrain || place.type || "wilds";
+  const palette = {
+    forest: ["#1f3828", "#0e1a12", "#223b24"],
+    woods: ["#203629", "#0d1810", "#1e3321"],
+    road: ["#40372a", "#181410", "#6f6045"],
+    shrine: ["#243544", "#0b1118", "#263a48"],
+    ruins: ["#32283b", "#120d18", "#4b4154"],
+    dungeon: ["#311b1b", "#120909", "#3a2523"],
+    wilds: ["#26392f", "#101812", "#27402d"],
+  }[terrain] || ["#26392f", "#101812", "#27402d"];
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, palette[0]); g.addColorStop(1, palette[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (terrain === "forest" || terrain === "woods" || place.type === "wilds") {
+    for (let i = 0; i < 8; i += 1) {
+      const x = (i * 73 + 28) % (W + 80) - 40;
+      const h = 44 + (i % 3) * 18;
+      ctx.fillStyle = "#182415"; ctx.fillRect(x + 10, groundY - h, 8, h);
+      ctx.fillStyle = i % 2 ? "#2f5631" : "#244a2d";
+      ctx.beginPath(); ctx.arc(x + 14, groundY - h - 8, 24, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (terrain === "road") {
+    ctx.fillStyle = "#66583f"; ctx.fillRect(W * 0.2, groundY - 20, W * 0.6, 42);
+  } else {
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    for (let i = 0; i < 5; i += 1) ctx.fillRect(W * (0.2 + i * 0.14), groundY - 28 - i % 2 * 10, 28, 34);
+  }
+  ctx.fillStyle = palette[2]; ctx.fillRect(0, groundY, W, H - groundY);
+  composeAvatar(ctx, W * 0.24, groundY, petFor({ id: token || "player", name: "You", archetype: "player", isPlayer: true }, 1), ts, 0.72, "idle");
+  drawLabel("You", W * 0.24, groundY - 72);
+}
+function drawScene(ts, info = playbackInfo(ts)) {
+  ctx.imageSmoothingEnabled = false;
+  if (info.stage === "partyFind" || info.stage === "stalled") drawTavern(ts, info);
+  else if (info.stage === "travel") drawRoad(ts, info);
+  else if (info.stage === "combat" || info.stage === "results") drawDungeon(ts, info);
+  else {
+    if (snap?.place?.type === "town" || snap?.place?.type === "city") drawTownScene(ts);
+    else drawBiomeScene(ts);
+  }
+}
+function updatePlaybackDom(info) {
+  const focused = info.stage === "combat" || info.stage === "results";
+  document.body.classList.toggle("dungeon-focus", focused);
+  requestAnimationFrame(fit);
+  if (!demoRun && !demoPending) {
+    $("result-card").classList.remove("show");
+    return;
+  }
+  if (info.stage === "partyFind") {
+    $("scene-place").textContent = `${demoRun?.startTile?.name || snap?.place?.name || "Millbridge"} Tavern`;
+    const joined = visibleJoinDecisions(info).length;
+    $("scene-flavor").textContent = `Party finding: ${joined}/4 joined.`;
+    $("result-card").classList.remove("show");
+  } else if (info.stage === "stalled") {
+    $("scene-place").textContent = `${demoRun?.startTile?.name || snap?.place?.name || "Millbridge"} Tavern`;
+    const joined = visibleJoinDecisions(info).length;
+    $("scene-flavor").textContent = `Planner backlog missed the 30s party deadline: ${joined}/4 joined, no automatic travel.`;
+    $("pending").textContent = "planner backlog: NPC decisions are arriving too late for this MMO loop";
+    $("result-card").classList.remove("show");
+  } else if (info.stage === "travel") {
+    const path = demoRun?.travelPath || [];
+    const here = path[info.stepIndex || 0] || demoRun?.startTile;
+    const next = path[Math.min(path.length - 1, (info.stepIndex || 0) + 1)] || demoRun?.targetTile;
+    $("scene-place").textContent = here?.name || "On the road";
+    $("scene-flavor").textContent = next?.id !== here?.id ? `Traveling toward ${next?.name}.` : `Arriving at ${demoRun?.targetTile?.name}.`;
+    $("result-card").classList.remove("show");
+  } else if (info.stage === "combat") {
+    const wave = (demoRun?.waves || [])[Math.max(0, info.waveIndex || 0)];
+    $("scene-place").textContent = `${demoRun?.targetTile?.name || snap?.place?.name || "Dungeon"} · ${wave?.title || "Combat"}`;
+    $("scene-flavor").textContent = info.event ? eventText(info.event, demoRun) : "The party squares up in the dark.";
+    $("result-card").classList.remove("show");
+  } else if (info.stage === "results") {
+    $("scene-place").textContent = `${demoRun?.targetTile?.name || "Dungeon"} · Results`;
+    $("scene-flavor").textContent = demoRun?.bossDead ? "The boss is down. The party counts what survived." : "The fight is over. The party catches its breath.";
+    renderResultCard();
+    commitPartyRun();
+  }
+  render_map();
+  render_tavern();
+  render_dungeon();
+}
+function frame(ts) {
+  lastFrameTs = ts;
+  const info = playbackInfo(ts);
+  if (info.key !== playbackKey) {
+    playbackKey = info.key;
+    updatePlaybackDom(info);
+  }
+  drawScene(ts, info);
+  drawMapAgents(ts, info);
+  requestAnimationFrame(frame);
+}
 requestAnimationFrame(frame);
 
 boot();

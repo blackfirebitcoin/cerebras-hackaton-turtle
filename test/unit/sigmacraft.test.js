@@ -36,11 +36,35 @@ describe("Sigmacraft state + overworld projection", () => {
     const snap = projectSigmacraftSnapshot(w, null, { token: "sig_z" });
     assert.equal(snap.place.id, townOf(w), "anonymous starts at the town tile");
     assert.ok(w.sigmacraft.map.tiles[snap.place.id], "place is a real tile");
+    assert.equal(snap.place.terrain, w.sigmacraft.map.tiles[snap.place.id].terrain);
     const moves = snap.validActions.filter((a) => a.kind === "move");
     assert.ok(moves.length > 0);
     for (const m of moves) assert.ok(w.sigmacraft.map.tiles[m.targetId], "move target is a real tile");
     assert.ok(snap.validActions.some((a) => a.kind === "rest"));
     assert.ok(snap.worldMap.cells.length > 0 && snap.worldMap.cells.some((c) => c.current));
+  });
+
+  test("snapshot includes a compact all-NPC map roster for animation", () => {
+    const w = freshWorld();
+    const npc = Object.values(w.sigmacraft.overworldNpcs)[0];
+    w.sigmacraft.npcAgents[npc.id] = {
+      plan: {
+        goal: "map the dangerous road",
+        agenda: [{ kind: "move", targetTileId: "basilisk_badlands" }],
+        cursor: 0,
+        dialogueLine: "The road has teeth.",
+        source: "fallback",
+        plannedAtTick: 7,
+      },
+    };
+    const snap = projectSigmacraftSnapshot(w, null, { token: "sig_z" });
+    assert.equal(snap.worldMap.npcs.length, NPC_POPULATION_TARGET);
+    const pub = snap.worldMap.npcs.find((n) => n.id === npc.id);
+    assert.equal(pub.tileId, npc.tileId);
+    assert.equal(pub.doing, "move");
+    assert.equal(pub.targetTileId, "basilisk_badlands");
+    assert.equal(pub.plannedAtTick, 7);
+    assert.equal(pub.memory, undefined, "rolling memory stays server-side");
   });
 
   test("an explicit token keys the current tile to actorPlaces", () => {

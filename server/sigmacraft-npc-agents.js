@@ -23,6 +23,11 @@ import {
 } from "../shared/sigmacraft.js";
 import { vNpcProposals } from "./validate.js";
 import { createLlmClient } from "./llm.js";
+import {
+  demoThroughputQueueEnabled,
+  requestDemoPlannerJobs,
+  takeReadyDemoPlannerJobs,
+} from "./sigmacraft-demo-throughput.js";
 
 // FNV-1a — deterministic, zero-IO seed from a string.
 function stableHash(str) {
@@ -259,13 +264,28 @@ export function attachNpcPlanner({ store, env = process.env, llm = createLlmClie
     // agenda is exhausted, so this caps how many fresh agendas we mint per cycle.
     const maxPerCycle = Math.max(1, envMax > 0 ? envMax : Math.ceil(ordered.length / 5));
     const start = ((s.npcCursor % ordered.length) + ordered.length) % ordered.length;
-    let planned = 0;
-    for (let i = 0; i < ordered.length && planned < maxPerCycle; i++) {
+    const candidates = [];
+    for (let i = 0; i < ordered.length && candidates.length < maxPerCycle; i++) {
       const id = ordered[(start + i) % ordered.length];
       // Skip recruited NPCs — they follow their party leader, not their own agenda.
       if (s.overworldNpcs[id]?.partyLock) continue;
       // Skip an NPC that's still walking its current agenda — let it finish.
       if (agendaInProgress(s.npcAgents[id]?.plan)) continue;
+      candidates.push(id);
+    }
+    if (demoThroughputQueueEnabled(s)) {
+      requestDemoPlannerJobs(s, candidates, Date.now());
+      const ready = takeReadyDemoPlannerJobs(s, candidates, maxPerCycle, Date.now());
+      for (const id of ready) {
+        if (await planOne(id, world)) {
+          s.npcCursor = (ordered.indexOf(id) + 1) % ordered.length;
+        }
+      }
+      return;
+    }
+    let planned = 0;
+    for (const id of candidates) {
+      if (planned >= maxPerCycle) break;
       if (await planOne(id, world)) {
         planned += 1;
         s.npcCursor = (ordered.indexOf(id) + 1) % ordered.length;

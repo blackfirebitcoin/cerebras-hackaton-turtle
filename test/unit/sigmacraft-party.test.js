@@ -87,6 +87,31 @@ describe("tavern recruit / disband", () => {
     assert.equal(w.sigmacraft.parties[LEADER].status, "traveling", "party is traveling");
   });
 
+  test("a completed dungeon party disbands when the leader leaves the dungeon", () => {
+    const w = freshWorld();
+    const dungeon = Object.values(w.sigmacraft.map.tiles).find((t) => t.type === "dungeon" && t.exits.length);
+    const exit = dungeon.exits.find((id) => w.sigmacraft.map.tiles[id]);
+    const npc = townNpcs(w)[0];
+    w.sigmacraft.actorPlaces[LEADER] = dungeon.id;
+    npc.tileId = dungeon.id;
+    npc.partyLock = LEADER;
+    w.sigmacraft.parties[LEADER] = {
+      leaderToken: LEADER,
+      status: "done",
+      targetTileId: dungeon.id,
+      members: [{ npcId: npc.id, name: npc.name, archetype: npc.archetype }],
+      lastDelve: { outcome: "victory", bossDead: true },
+    };
+
+    enqueueSigmacraftIntent(w, LEADER, { kind: "move", targetId: exit, nonce: "leave-dungeon" });
+    advance({ world: w, store: feedStore() });
+
+    assert.equal(w.sigmacraft.actorPlaces[LEADER], exit, "leader leaves the dungeon");
+    assert.equal(w.sigmacraft.parties[LEADER], undefined, "party removed after leaving");
+    assert.equal(npc.partyLock, null, "partyLock released");
+    assert.equal(npc.tileId, dungeon.id, "former member does not keep following after the run");
+  });
+
   test("disband clears the party and releases partyLock; snapshot reflects it", () => {
     const w = freshWorld();
     const npc = townNpcs(w)[0];

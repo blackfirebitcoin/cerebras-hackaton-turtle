@@ -412,11 +412,42 @@ function npcCountsByTile(overworldNpcs) {
   return counts;
 }
 
+// Compact public roster for map animation. This deliberately exposes only
+// presentation-safe state: identity, tile, and planner surface metadata.
+function projectMapNpcs(sigmacraft) {
+  const agents = sigmacraft?.npcAgents || {};
+  const demoQueue = sigmacraft?.demoThroughput?.queue || [];
+  const queued = new Set(demoQueue.map((j) => j?.npcId).filter(Boolean));
+  const stale = new Set(sigmacraft?.demoThroughput?.staleNpcIds || []);
+  return Object.values(sigmacraft?.overworldNpcs || {})
+    .map((npc) => {
+      const plan = agents[npc.id]?.plan || null;
+      const objective = plan?.agenda && Array.isArray(plan.agenda) ? plan.agenda[plan.cursor || 0] : null;
+      const plannerState = stale.has(npc.id) ? "stale" : queued.has(npc.id) ? "queued" : null;
+      return {
+        id: npc.id,
+        name: npc.name,
+        archetype: npc.archetype || null,
+        archetypeLabel: npc.archetypeLabel || npc.archetype || null,
+        faction: npc.faction || null,
+        tileId: npc.tileId,
+        goal: plan?.goal || null,
+        doing: objective?.kind || null,
+        targetTileId: objective?.targetTileId || null,
+        plannedAtTick: plan?.plannedAtTick || 0,
+        planSource: plan?.source || null,
+        plannerState,
+        partyLock: npc.partyLock || null,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
 // Windowed map read model: the current tile + its Chebyshev-radius neighborhood,
 // bounded by MAX_WORLDMAP_CELLS, with live npcCount + reachability flags.
 function projectWorldMap(sigmacraft, currentTileId, reachable) {
   const map = sigmacraft?.map;
-  if (!map?.tiles) return { width: 0, height: 0, cells: [] };
+  if (!map?.tiles) return { width: 0, height: 0, cells: [], npcs: [] };
   const counts = npcCountsByTile(sigmacraft.overworldNpcs);
   const cur = map.tiles[currentTileId];
   const cx = cur?.x ?? 0;
@@ -438,7 +469,7 @@ function projectWorldMap(sigmacraft, currentTileId, reachable) {
     if (cells.length >= MAX_WORLDMAP_CELLS) break;
   }
   cells.sort((a, b) => a.y - b.y || a.x - b.x);
-  return { width: map.width, height: map.height, window: WORLD_MAP_WINDOW, cells };
+  return { width: map.width, height: map.height, window: WORLD_MAP_WINDOW, cells, npcs: projectMapNpcs(sigmacraft) };
 }
 
 // Overworld NPCs + other player/agent actors standing in the current tile.
@@ -503,6 +534,7 @@ export function projectSigmacraftSnapshot(world, character = null, opts = {}) {
         id: tile.id,
         name: tile.name,
         type: tile.type,
+        terrain: tile.terrain || null,
         danger: tile.danger,
         region: tile.region,
         flavor: tile.description,

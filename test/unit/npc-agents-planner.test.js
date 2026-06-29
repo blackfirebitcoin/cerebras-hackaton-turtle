@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { attachNpcPlanner, makeNpcFallbackProposal } from "../../server/sigmacraft-npc-agents.js";
+import { setDemoThroughputProfile } from "../../server/sigmacraft-demo-throughput.js";
 import { freshWorld } from "../../server/world-tick.js";
 import { vNpcProposal } from "../../server/validate.js";
 
@@ -74,5 +75,17 @@ describe("off-tick scheduler", () => {
     const w = freshWorld();
     await attachNpcPlanner({ store: fakeStore(w), env: { SIGMACRAFT_NPC_MAX_PER_CYCLE: "3" } }).plan();
     assert.equal(Object.values(w.sigmacraft.npcAgents).filter((a) => a.plan).length, 3);
+  });
+
+  test("demo throughput queue throttles how many NPC plans can be written", async () => {
+    const w = freshWorld();
+    setDemoThroughputProfile(w.sigmacraft, "slow50", Date.now());
+
+    await attachNpcPlanner({ store: fakeStore(w), env: {} }).plan();
+
+    const planned = Object.values(w.sigmacraft.npcAgents).filter((a) => a.plan).length;
+    assert.ok(planned > 0, "some completed jobs can plan");
+    assert.ok(planned < Math.ceil(Object.keys(w.sigmacraft.overworldNpcs).length / 5), "slow throughput cannot write the full batch");
+    assert.ok(w.sigmacraft.demoThroughput.queue.length > 100, "uncompleted jobs remain queued");
   });
 });
