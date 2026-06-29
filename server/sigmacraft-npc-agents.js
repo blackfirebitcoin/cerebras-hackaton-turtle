@@ -152,7 +152,6 @@ export function attachNpcPlanner({ store, env = process.env } = {}) {
     // window (e.g. 200 / 5 = 40 per 15s cycle) rather than ~50 min at 1/cycle.
     const maxPerCycle = Math.max(1, envMax > 0 ? envMax : Math.ceil(ordered.length / NPC_PLAN_REUSE_TICKS));
     const start = ((s.npcCursor % ordered.length) + ordered.length) % ordered.length;
-    let wrote = false;
     let planned = 0;
     for (let i = 0; i < ordered.length && planned < maxPerCycle; i++) {
       const id = ordered[(start + i) % ordered.length];
@@ -162,12 +161,18 @@ export function attachNpcPlanner({ store, env = process.env } = {}) {
         continue;
       }
       if (await planOne(id, world)) {
-        wrote = true;
         planned += 1;
         s.npcCursor = (ordered.indexOf(id) + 1) % ordered.length;
       }
     }
-    if (wrote) store.putWorldState(world);
+    // NPC plans are ambient and regenerable from seed, so they live in-memory
+    // ONLY. store.getWorldState() hands out the live world ref, so planOne's
+    // writes are already visible to the fast lane and snapshots. We deliberately
+    // do NOT putWorldState here: persisting ambient NPC churn every planner cycle
+    // would rewrite world.json on an idle/player-less server and defeat idle
+    // quiescence (the persist signal lives in advance(), gated to player intents —
+    // see server/sigmacraft.js). A future option is a throttled 60s checkpoint on
+    // the legacy lane if NPC memory ever needs to survive restart.
   }
 
   return { plan };
