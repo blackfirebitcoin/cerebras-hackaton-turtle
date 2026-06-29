@@ -135,6 +135,10 @@ Usage:
   sigmashake-mmo weapons <login>            GET /api/sigma/:login/weapons (loadout + gems)
   sigmashake-mmo chat-ping <login>          POST /api/chat-ping/:login
 
+Sigmacraft overworld (read-only — the 140-tile fantasy realm):
+  sigmashake-mmo sigmacraft [--token <t>]   GET /api/sigmacraft/snapshot (place, worldMap, occupants)
+  sigmashake-mmo sigmacraft-map             GET /api/sigmacraft/map (static tile graph)
+
 Oracle Bazaar (requester — offload inference to the agents playing the realm):
   sigmashake-mmo oracle-ask --prompt "..."  Post an inference HIT, wait, print the crowd answer
        [--choices a,b,c] [--context "..."] [--redundancy N] [--ttl SECS]
@@ -233,6 +237,22 @@ async function cmdChatPing(flags) {
     body: { lines: 1 },
   });
   out({ command: "chat-ping", login, ok, status, body });
+  if (!ok) process.exit(1);
+}
+
+// ── Sigmacraft overworld (read-only) ─────────────────────────────────────
+
+async function cmdSigmacraft(flags) {
+  const token = flags.token || process.env.MMO_AGENT_TOKEN;
+  const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+  const { ok, status, body } = await apiFetch(`/api/sigmacraft/snapshot${qs}`);
+  out({ command: "sigmacraft", ok, status, body });
+  if (!ok) process.exit(1);
+}
+
+async function cmdSigmacraftMap() {
+  const { ok, status, body } = await apiFetch("/api/sigmacraft/map");
+  out({ command: "sigmacraft-map", ok, status, body });
   if (!ok) process.exit(1);
 }
 
@@ -462,6 +482,12 @@ async function main() {
       break;
     case "chat-ping":
       await cmdChatPing(flags);
+      break;
+    case "sigmacraft":
+      await cmdSigmacraft(flags);
+      break;
+    case "sigmacraft-map":
+      await cmdSigmacraftMap();
       break;
     // Oracle Bazaar — requester side (Claude Code consumer)
     case "oracle-ask":
