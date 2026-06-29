@@ -43,11 +43,14 @@ export function runPartyDelve({ world, store, token, character, bossDrops = null
   if (character?.run && character.run.alive === false) {
     return { ok: false, error: "your hero has fallen — mint a new playtest run to delve again" };
   }
-  // Per-tile cooldown: a freshly-cleared dungeon won't respawn loot for a while.
-  // Keyed by tile ID for EVERY cleared dungeon (not just the last), so an A→B→A
-  // rotation can't re-farm A. With HP cost + permadeath, the loot loop has real cost.
-  party.clearedTiles = party.clearedTiles || {};
-  const clearedAt = party.clearedTiles[tileId];
+  // Per-tile loot cooldown. CRITICAL: it lives in a per-TOKEN namespace on the world
+  // (s.delveCooldowns[token]), NOT inside the party record — a free `disband` deletes
+  // the party, so a party-scoped ledger would reset the cooldown and reopen the
+  // faucet. Keyed by tile id for EVERY cleared dungeon (an A→B→A rotation can't
+  // re-farm A). A re-mint (new token) legitimately starts fresh.
+  s.delveCooldowns = s.delveCooldowns || {};
+  const cooldowns = s.delveCooldowns[token] || (s.delveCooldowns[token] = {});
+  const clearedAt = cooldowns[tileId];
   if (Number.isFinite(clearedAt) && (s.tick || 0) - clearedAt < DELVE_COOLDOWN_TICKS) {
     return { ok: false, error: "this dungeon is freshly cleared — its spoils won't respawn yet" };
   }
@@ -92,7 +95,7 @@ export function runPartyDelve({ world, store, token, character, bossDrops = null
     drops: loot.drops.map((d) => ({ to: d.memberName, item: d.item?.name || "loot", rarity: d.item?.rarity, fromBoss: d.fromBoss })),
     at: s.tick || 0,
   };
-  if (result.outcome === "victory") party.clearedTiles[tileId] = s.tick || 0;
+  if (result.outcome === "victory") cooldowns[tileId] = s.tick || 0; // disband-proof ledger
   party.status = result.outcome === "victory" ? "done" : "forming";
   store?.pushFeed?.({ kind: "narrative", name: "Dungeon", detail: `Party ${result.outcome} in ${tile.name} (${result.kills.length} slain, ${kept} loot to the leader).` });
 

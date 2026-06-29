@@ -43,6 +43,9 @@ function ensureState(world) {
     s.gameMaster = { status: "idle", lastBeatTick: 0, lastBeatKind: null, beats: 0 };
   }
   if (!s.parties || typeof s.parties !== "object") s.parties = {};
+  // Per-token dungeon loot cooldowns — kept OUTSIDE the party record so `disband`
+  // can't reset them (anti loot-faucet).
+  if (!s.delveCooldowns || typeof s.delveCooldowns !== "object") s.delveCooldowns = {};
   // Heal/migrate the overworld map + population for pre-overworld worlds.
   seedSigmacraftOverworld(s, s.realmId || "sigmacraft_alpha");
   return s;

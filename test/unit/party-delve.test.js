@@ -85,9 +85,24 @@ describe("runPartyDelve", () => {
     w.sigmacraft.actorPlaces[token] = A.id;
     // A was cleared this very tick — the cooldown must block re-entry regardless of
     // having delved other tiles in between (the rotation bypass the review found).
-    w.sigmacraft.parties[token] = { leaderToken: token, members: [], status: "done", clearedTiles: { [A.id]: w.sigmacraft.tick || 0 } };
+    w.sigmacraft.delveCooldowns = { [token]: { [A.id]: w.sigmacraft.tick || 0 } };
     const out = runPartyDelve({ world: w, store, token, character: playtest(11), bossDrops: boss() });
     assert.equal(out.ok, false);
+    assert.match(out.error, /respawn|freshly cleared/);
+  });
+
+  test("the delve cooldown SURVIVES a disband (no faucet reset via membership ops)", () => {
+    const w = freshWorld();
+    const token = "sig_dis";
+    const A = dungeonTile(w);
+    w.sigmacraft.actorPlaces[token] = A.id;
+    // A was cleared this tick — cooldown lives in the per-token namespace
+    w.sigmacraft.delveCooldowns = { [token]: { [A.id]: w.sigmacraft.tick || 0 } };
+    // a recruited party then DISBANDED (record deleted) must NOT reopen the cooldown
+    w.sigmacraft.parties[token] = { leaderToken: token, members: [], status: "done" };
+    delete w.sigmacraft.parties[token]; // simulate the disband intent's effect
+    const out = runPartyDelve({ world: w, store, token, character: playtest(5), bossDrops: boss() });
+    assert.equal(out.ok, false, "cooldown still blocks after disband");
     assert.match(out.error, /respawn|freshly cleared/);
   });
 
