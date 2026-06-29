@@ -34,16 +34,19 @@ function enemyToCombatant(e, idx, bossId = null) {
 export function buildDungeonEnemies(tile, partySize = 1, seed = 1) {
   const rng = makeRng((seed >>> 0) || 1);
   const danger = Math.max(1, tile?.danger || 1);
-  const level = 3 + danger * 2;
-  const depth = danger;
-  const count = Math.max(2, Math.min(7, partySize + Math.floor(danger / 2)));
+  // Gentle scaling tuned for a winnable demo: a level-8 party beats a low/mid
+  // dungeon comfortably; danger climbs the threat. A mythic BOSS only caps the
+  // deepest tier (danger>=5) so mid-danger delves end in victory + loot.
+  const level = 2 + danger;
+  const depth = Math.floor(danger / 2);
+  const count = Math.max(2, Math.min(6, partySize + Math.floor(danger / 2)));
   const enemies = [];
   for (let i = 0; i < count; i++) {
     enemies.push(enemyToCombatant(makeEnemy(rng.pick(NORMALS), level, depth, rng), i));
   }
-  if (danger >= 3) {
+  if (danger >= 5) {
     const bossId = rng.pick(BOSSES);
-    enemies.push(enemyToCombatant(makeEnemy(bossId, level + 2, depth + 1, rng), count, bossId));
+    enemies.push(enemyToCombatant(makeEnemy(bossId, level + 1, depth + 1, rng), count, bossId));
   }
   return { enemies, level, depth, danger };
 }

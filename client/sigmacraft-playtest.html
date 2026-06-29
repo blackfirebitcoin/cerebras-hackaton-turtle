@@ -73,6 +73,14 @@
   .party-hd { font-weight: 600; margin-bottom: .3rem; }
   .party-list { list-style: none; padding: 0; margin: .2rem 0; }
   .party-list li { padding: .12rem 0; }
+  #dungeon-wrap { margin-top: .6rem; padding: .5rem; border: 1px solid rgba(215,116,116,.3); border-radius: 8px; background: rgba(215,116,116,.05); }
+  button.act.delve { background: rgba(215,116,116,.18); width: 100%; margin: .4rem 0; font-weight: 600; }
+  .combat { margin-top: .5rem; }
+  .combat-hd { font-weight: 700; margin-bottom: .25rem; }
+  .combat-loot ul, .combat-log { list-style: none; padding: .2rem 0 0; margin: 0; }
+  .combat-loot li, .combat-log li { padding: .08rem 0; font-size: .92em; }
+  .combat-log { max-height: 220px; overflow-y: auto; }
+  .combat-log li.kill { color: var(--danger); }
   .pending { color: var(--amber); font-size: 12px; min-height: 16px; }
   .obj { font-size: 12px; color: #e7d9b8; border-left: 2px solid var(--amber); padding-left: 8px; margin: 4px 0; }
   .occ { color: var(--muted); font-size: 11px; }
@@ -124,6 +132,11 @@
       <h2>🍺 Tavern — Party Finding</h2>
       <div class="party" id="party"></div>
       <div class="recruits" id="recruits"></div>
+    </div>
+
+    <div id="dungeon-wrap" style="display:none">
+      <h2>⚔ Dungeon</h2>
+      <div id="dungeon-body"></div>
     </div>
 
     <h2>Recent Events</h2>
@@ -246,6 +259,7 @@ function render_side() {
     ? occ.map(o => `<b>${o.name}</b>${o.kind === "npc" && o.faction ? ` <span class="dim">(${o.faction})</span>` : ""}`).join(", ")
     : '<span class="dim">no one else is here.</span>';
   render_tavern();
+  render_dungeon();
   $("pending").textContent = snap?.pendingIntent
     ? `… ${snap.pendingIntent.kind}${snap.pendingIntent.targetId ? " → " + snap.pendingIntent.targetId : ""} (queued)` : "";
   const evs = (snap?.recentEvents || []).slice().reverse();
@@ -279,6 +293,51 @@ function render_tavern() {
   for (const b of $("recruits").querySelectorAll("button.recruit")) {
     b.onclick = () => act({ kind: "recruit", targetNpcId: b.dataset.id });
   }
+}
+
+// Dungeon: only at a dungeon tile. Delve with your party — a turn-based, scaled
+// encounter; the leader keeps the loot. Renders the combat log + loot afterward.
+let lastCombat = null;
+function render_dungeon() {
+  const wrap = $("dungeon-wrap");
+  if (snap?.place?.type !== "dungeon") { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  const psize = 1 + (snap?.party?.members?.length || 0);
+  let html = `<div class="dim">You stand at the mouth of <b>${snap.place.name}</b> — danger ${snap.place.danger ?? "?"}.</div>` +
+    `<button class="act delve" id="btn-delve">⚔ Delve with your party of ${psize}</button>`;
+  if (lastCombat) html += render_combat(lastCombat);
+  $("dungeon-body").innerHTML = html;
+  $("btn-delve").onclick = delve;
+}
+function render_combat(c) {
+  const oc = c.outcome === "victory" ? "🏆 VICTORY" : c.outcome === "defeat" ? "💀 DEFEAT" : "⏳ TIMEOUT";
+  const survivors = (c.party || []).map(p => `${p.name}${p.alive ? "" : " ☠"}${p.fled ? " (fled)" : ""}`).join(", ");
+  const loot = (c.loot || []).length
+    ? c.loot.map(l => `<li>${l.fromBoss ? "👑 " : ""}<b>${l.item?.name || "loot"}</b> <span class="dim">${l.item?.rarity || ""}</span> → ${l.to}</li>`).join("")
+    : `<li class="dim">no loot</li>`;
+  const logLines = (c.log || []).map(e => {
+    if (e.kind === "dodge") return `<li class="dim">r${e.round} ${e.actor} → ${e.target}: dodged</li>`;
+    if (e.kind === "death") return `<li class="kill">r${e.round} ${e.target} falls!</li>`;
+    if (e.kind === "flee") return `<li class="dim">r${e.round} ${e.actor} flees the fight</li>`;
+    const tag = e.kind === "crit" ? "💥" : e.kind === "overload" ? "⚡" : "";
+    return `<li>r${e.round} ${e.actor} → ${e.target}: ${tag}${e.amount} <span class="dim">(${e.targetHp}hp)</span></li>`;
+  }).join("");
+  return `<div class="combat"><div class="combat-hd">${oc} · ${c.rounds} rounds · ${c.tile}</div>` +
+    `<div class="combat-party">Party: ${survivors}</div>` +
+    `<div class="combat-loot"><b>Loot</b><ul>${loot}</ul></div>` +
+    `<details><summary>Combat log (${(c.log || []).length} events)</summary><ul class="combat-log">${logLines}</ul></details></div>`;
+}
+async function delve() {
+  if (!token) return;
+  const b = $("btn-delve"); if (b) { b.disabled = true; b.textContent = "⚔ Delving…"; }
+  try {
+    const j = await (await fetch("/api/sigmacraft/delve", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }),
+    })).json();
+    lastCombat = j.ok ? j : null;
+    if (!j.ok) $("pending").textContent = `delve: ${j.error || "failed"}`;
+  } catch { /* transient */ }
+  await refresh();
 }
 
 function render() {

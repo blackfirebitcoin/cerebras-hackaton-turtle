@@ -20,16 +20,17 @@ describe("buildDungeonEnemies — deterministic + party-scaled", () => {
     assert.ok(big.enemies.length > a.enemies.length, "party size scales the pack");
   });
 
-  test("a dangerous dungeon is capped by a real boss (RAID_BOSS_DROPS id)", () => {
-    const { enemies } = buildDungeonEnemies(tile(4), 3, 5);
+  test("the deepest tier (danger>=5) is capped by a real boss (RAID_BOSS_DROPS id)", () => {
+    const { enemies } = buildDungeonEnemies(tile(5), 3, 5);
     const boss = enemies.find((e) => e.isBoss);
-    assert.ok(boss, "a boss caps the pack");
+    assert.ok(boss, "a boss caps the deepest pack");
     assert.ok(["goblin_king", "hollow_druid", "chrome_centurion", "catacomb_tyrant"].includes(boss.bossId));
     assert.ok(boss.sheet.maxHp > 0 && boss.sheet.attack > 0);
   });
 
-  test("low-danger dungeons have no boss", () => {
+  test("mid-and-lower dungeons have no boss (winnable for loot)", () => {
     assert.ok(!buildDungeonEnemies(tile(1), 2, 9).enemies.some((e) => e.isBoss));
+    assert.ok(!buildDungeonEnemies(tile(4), 3, 9).enemies.some((e) => e.isBoss));
   });
 });
 

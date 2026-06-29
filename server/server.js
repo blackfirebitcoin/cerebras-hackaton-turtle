@@ -72,6 +72,7 @@ import * as sigmacraft from "./sigmacraft.js";
 import { attachNpcPlanner } from "./sigmacraft-npc-agents.js";
 import { attachDirector } from "./sigmacraft-director.js";
 import { createBossDropForge } from "./cerebras-boss-drops.js";
+import { runPartyDelve } from "./party-delve.js";
 import * as storytellerLoop from "./storyteller-loop.js";
 import {
   guard,
@@ -503,6 +504,29 @@ app.post(
       token,
       snapshot: projectSigmacraftSnapshot(store.getWorldState(), character, { token }),
     });
+  }),
+);
+// Party dungeon delve (demo). Runs INLINE here (server-authoritative, bounded,
+// NEVER in the 3s tick / planner) — the party at a dungeon tile fights a scaled,
+// turn-based encounter; the leader keeps the loot. Mirrors the live-delve discipline.
+app.post(
+  "/api/sigmacraft/delve",
+  guard("POST /api/sigmacraft/delve", (req, res) => {
+    const token = String(req.body?.token || "").slice(0, 64);
+    const rec = token ? store.getPlayer(token) : null;
+    if (!rec?.character) {
+      res.status(401).json({ ok: false, error: "unknown token" });
+      return;
+    }
+    const world = store.getWorldState();
+    const out = runPartyDelve({ world, store, token, character: rec.character, bossDrops });
+    if (!out.ok) {
+      res.status(400).json(out);
+      return;
+    }
+    store.putPlayer(token, rec.character); // persist the leader's new loot
+    store.putWorldState(world); // persist party.lastDelve
+    res.json(out);
   }),
 );
 app.get(
