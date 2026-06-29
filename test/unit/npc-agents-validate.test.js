@@ -1,16 +1,19 @@
-// SIGMA ABYSS — NPC proposal validation (PR7 trust boundary, overworld ids).
+// SIGMA ABYSS — NPC proposal validation (PR-C trust boundary, agenda model).
 // Run: node --test test/unit/npc-agents-validate.test.js
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { vNpcProposal, vNpcProposals, vTileId, vNpcAgentId } from "../../server/validate.js";
+import { vNpcAgenda, vNpcProposal, vNpcProposals, vTileId, vNpcAgentId } from "../../server/validate.js";
 
 const base = (over = {}) => ({
   npcId: "npc_adventurer_000",
   currentGoal: "find trouble",
   dialogueLine: "Trouble on the road? Point me at it.",
-  step: { kind: "talk", targetId: "npc_adventurer_000" },
+  agenda: [
+    { kind: "gather", targetTileId: "wild_05_05" },
+    { kind: "rest", targetTileId: "millbridge" },
+  ],
   memoryPatch: { goals: [{ text: "g" }], recentIncidents: [], summaryPointer: "x" },
   source: "fallback",
   ...over,
@@ -28,21 +31,46 @@ describe("vTileId / vNpcAgentId shape validators", () => {
   });
 });
 
+describe("vNpcAgenda — the strategic plan boundary", () => {
+  test("accepts known action kinds with optional target tiles", () => {
+    const a = vNpcAgenda([
+      { kind: "fight", targetTileId: "wild_10_00" },
+      { kind: "rest" },
+      { kind: "craft", targetTileId: "millbridge" },
+    ]);
+    assert.equal(a.length, 3);
+    assert.equal(a[0].kind, "fight");
+    assert.equal(a[0].targetTileId, "wild_10_00");
+    assert.equal(a[1].targetTileId, undefined); // optional
+  });
+
+  test("DROPS objectives with a bad kind or a malformed target (vArr, not reject-batch)", () => {
+    const a = vNpcAgenda([
+      { kind: "gather", targetTileId: "wild_05_05" }, // good
+      { kind: "teleport", targetTileId: "wild_05_05" }, // bad kind → dropped
+      { kind: "move", targetTileId: "Bad Tile!" }, // bad tile → dropped
+      { kind: "rest" }, // good
+    ]);
+    assert.equal(a.length, 2, "only the two valid objectives survive");
+    assert.deepEqual(a.map((o) => o.kind), ["gather", "rest"]);
+  });
+
+  test("caps the agenda length", () => {
+    const a = vNpcAgenda(Array.from({ length: 20 }, () => ({ kind: "rest" })));
+    assert.ok(a.length <= 5, `agenda capped (got ${a.length})`);
+  });
+});
+
 describe("vNpcProposal rejects what the model must not assert", () => {
   test("malformed npcId throws; vNpcProposals drops it", () => {
     assert.throws(() => vNpcProposal(base({ npcId: "nobody" })), /bad npc id/);
     assert.deepEqual(vNpcProposals([base({ npcId: "nobody" })]), []);
   });
 
-  test("malformed move tile + bad step kind rejected", () => {
-    assert.throws(() => vNpcProposal(base({ step: { kind: "move", targetId: "Bad Tile!" } })), /bad tile id/);
-    assert.throws(() => vNpcProposal(base({ step: { kind: "fly", targetId: "npc_adventurer_000" } })), /bad enum/);
-  });
-
-  test("a valid tile move passes (existence re-checked later, not here)", () => {
-    const clean = vNpcProposal(base({ step: { kind: "move", targetId: "wild_05_05" } }));
-    assert.equal(clean.step.kind, "move");
-    assert.equal(clean.step.targetId, "wild_05_05");
+  test("a valid agenda passes (tile existence re-checked on the tick, not here)", () => {
+    const clean = vNpcProposal(base({ agenda: [{ kind: "move", targetTileId: "wild_05_05" }] }));
+    assert.equal(clean.agenda[0].kind, "move");
+    assert.equal(clean.agenda[0].targetTileId, "wild_05_05");
   });
 
   test("a 200-proposal batch is not truncated", () => {

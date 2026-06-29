@@ -28,8 +28,10 @@ function trackingStore(world) {
   };
 }
 
-const anyUnconsumedPlan = (w) =>
-  Object.values(w.sigmacraft.npcAgents).some((a) => a?.plan && !a.plan.consumed);
+const anyActiveAgenda = (w) =>
+  Object.values(w.sigmacraft.npcAgents).some(
+    (a) => a?.plan?.agenda && (a.plan.cursor || 0) < a.plan.agenda.length,
+  );
 
 describe("idle-quiescence: a player-less world reaches a no-write steady state", () => {
   test("the real planner + fast lane never raise the persist signal with no players", async () => {
@@ -39,10 +41,9 @@ describe("idle-quiescence: a player-less world reaches a no-write steady state",
 
     // Drive several full planner→consume cycles, exactly as the live loops do.
     for (let cycle = 0; cycle < 3; cycle++) {
-      await planner.plan(); // manufactures ~40 ambient plans (deterministic fallback)
-      assert.ok(anyUnconsumedPlan(w), "planner produced unconsumed ambient plans (loop is live)");
-      // The fast lane drains them over multiple base ticks; none may be a persist
-      // signal. 6 ticks comfortably drains a 40-plan batch at 12/tick.
+      await planner.plan(); // manufactures ~40 ambient agendas (deterministic fallback)
+      assert.ok(anyActiveAgenda(w), "planner produced active ambient agendas (loop is live)");
+      // The fast lane walks them over many base ticks; none may be a persist signal.
       for (let t = 0; t < 6; t++) {
         assert.equal(advance({ world: w, store }), false, "an NPC-only tick must not be dirty");
       }

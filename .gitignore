@@ -1,0 +1,16 @@
+# Secrets — NEVER commit. The Cerebras/LLM key + HMAC keys live ONLY in the
+# environment (e.g. ~/.sigmashake/mmo.env), never in tracked files.
+.env
+.env.*
+*.env
+.sigmashake/
+secrets/
+*.key
+*.pem
+
+# Runtime state + local noise (these were never meant to be tracked)
+node_modules/
+data/
+.DS_Store
+**/.DS_Store
+*.log

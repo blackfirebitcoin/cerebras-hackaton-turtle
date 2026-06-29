@@ -12,7 +12,9 @@
   },
   "scripts": {
     "start": "node server/server.js",
+    "start:live": "node --import ./server/load-env.js server/server.js",
     "dev": "node --watch server/server.js",
+    "dev:live": "node --import ./server/load-env.js --watch server/server.js",
     "tunnel": "cloudflared tunnel --url http://localhost:7777",
     "smoke": "node server/smoke.js",
     "test": "node --test test/unit/*.test.js",
