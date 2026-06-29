@@ -26,7 +26,7 @@ import {
 } from "../shared/constants.js";
 import { ENEMIES } from "../shared/enemies.js";
 import { FACTION_IDS, factionById } from "../shared/factions.js";
-import { forgeRaidDrop, itemPower } from "../shared/loot.js";
+import { itemPower } from "../shared/loot.js";
 import { freshMarket } from "../shared/market.js";
 import { passivePointsFor, passiveTreePayload } from "../shared/passive-tree.js";
 import { projectSigmacraftSnapshot } from "../shared/sigmacraft.js";
@@ -71,6 +71,7 @@ import * as store from "./store.js";
 import * as sigmacraft from "./sigmacraft.js";
 import { attachNpcPlanner } from "./sigmacraft-npc-agents.js";
 import { attachDirector } from "./sigmacraft-director.js";
+import { createBossDropForge } from "./cerebras-boss-drops.js";
 import * as storytellerLoop from "./storyteller-loop.js";
 import {
   guard,
@@ -2323,6 +2324,13 @@ function startMonster(fromLogin) {
   return currentRaid;
 }
 
+// Gemma boss-drop forge (Phase D). Default OFF (BOSS_DROPS_LIVE unset) ⇒
+// forgeOrCached is exactly forgeRaidDrop and warm() is a no-op, so raid loot is
+// byte-identical to before. When enabled, the FIRST kill of a boss ships the
+// deterministic drop + warms an off-tick Gemma re-theme; later kills get the
+// cached, validated enrichment instantly. The LLM is never awaited on the kill path.
+const bossDrops = createBossDropForge({});
+
 function endRaid(victory, lastHitLogin) {
   if (!currentRaid) return null;
   const raid = currentRaid;
@@ -2369,7 +2377,11 @@ function endRaid(victory, lastHitLogin) {
         rec.character.lifetimeKills = (rec.character.lifetimeKills || 0) + 1;
         if (isBoss) {
           const lvl = rec.character.run?.level || 1;
-          const item = forgeRaidDrop(raid.boss_id, lvl);
+          // Instant, sync: cached Gemma enrichment if warm, else the deterministic
+          // forge. NEVER awaits the model on the kill path.
+          const item = bossDrops.forgeOrCached(raid.boss_id, lvl);
+          // Fire-and-forget: warm the cache off-tick for the next kill of this boss.
+          bossDrops.warm(raid.boss_id, lvl, { killerLevel: lvl, zone: raid.bossZone }).catch(() => {});
           if (item) {
             const inv = rec.character.run?.inventory;
             if (Array.isArray(inv) && inv.length < INVENTORY_MAX) {
