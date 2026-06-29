@@ -23,6 +23,17 @@ export const MAX_SIGMACRAFT_PENDING_INTENTS = 128;
 export const MAX_SIGMACRAFT_TICK_INTENTS = 16;
 export const MAX_SIGMACRAFT_RECENT_EVENTS = 40;
 
+// Bounded NPC-agent proposal lane (integrate-this PR7). Gemma proposes OFF the
+// tick; these caps are enforced at the validate.js trust boundary and on the
+// rolling memory window. NPC_DIALOGUE_MAX matches the feed detail cap so an
+// accepted line never silently truncates downstream.
+export const MAX_NPC_AGENT_GOALS = 2;
+export const MAX_NPC_AGENT_INCIDENTS = 8;
+export const NPC_GOAL_TEXT_MAX = 96;
+export const NPC_DIALOGUE_MAX = 140;
+export const NPC_SUMMARY_MAX = 160;
+export const NPC_PLAN_REUSE_TICKS = 5;
+
 // One active public quest stage to start (integrate-this first-slice §9).
 export const DEFAULT_SIGMACRAFT_OBJECTIVE = Object.freeze({
   questId: "ash_shrine",
@@ -45,6 +56,10 @@ export function createSigmacraftState() {
     // VCS account POINTERS only (token -> {vcsAccountId, snapshotVersion,
     // twitchLogin, identitySource, verified}). Never durable account state.
     vcsAccounts: {},
+    // Gemma NPC controller state (PR7): npcId -> { plan, memory }. Proposals are
+    // written OFF the tick; a later tick consumes one bounded effect.
+    npcAgents: {},
+    npcCursor: 0,
   };
 }
 
@@ -88,12 +103,15 @@ function projectOccupants(world, sigmacraft, currentZoneId, selfToken) {
   const out = [];
   for (const npc of Object.values(world?.npcs || {})) {
     if (npc.zoneId !== currentZoneId) continue;
+    const agentPlan = sigmacraft?.npcAgents?.[npc.id]?.plan || null;
     out.push({
       id: npc.id,
       kind: "npc",
       name: NPCS[npc.id]?.name || npc.id,
       faction: npc.factionId || null,
       mood: Number.isFinite(npc.moodValue) ? npc.moodValue : 50,
+      goal: agentPlan?.currentGoal || null,
+      lastLine: agentPlan?.dialogueLine || null,
     });
     if (out.length >= 16) break;
   }

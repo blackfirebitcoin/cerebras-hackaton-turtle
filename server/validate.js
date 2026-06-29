@@ -34,7 +34,14 @@ import {
 import { REAGENT_CODES } from "../shared/crafting.js";
 import { DISEASE_IDS } from "../shared/diseases.js";
 import { FACTION_IDS, FACTION_MAX_REP } from "../shared/factions.js";
-import { SIGMACRAFT_INTENT_KINDS } from "../shared/sigmacraft.js";
+import {
+  MAX_NPC_AGENT_GOALS,
+  MAX_NPC_AGENT_INCIDENTS,
+  NPC_DIALOGUE_MAX,
+  NPC_GOAL_TEXT_MAX,
+  NPC_SUMMARY_MAX,
+  SIGMACRAFT_INTENT_KINDS,
+} from "../shared/sigmacraft.js";
 import { BODY_PART_IDS } from "../shared/health.js";
 import { INSPIRATION_IDS } from "../shared/inspirations.js";
 import { SET_IDS } from "../shared/item-sets.js";
@@ -184,6 +191,47 @@ export function vSigmacraftIntent(x) {
     return { kind, nonce, targetId: vEnum(o.targetId, ZONE_IDS) }; // throws on unknown zone
   }
   return { kind, nonce };
+}
+
+// Gemma NPC proposal (integrate-this PR7) — the trust boundary for off-tick model
+// output. vArr DROPS malformed proposals rather than rejecting the batch; vEnum
+// hard-constrains npcId + move targets to known sets; vStr scrubs control/zero-
+// width chars and caps length so nothing unbounded reaches the feed.
+export function vNpcMemory(x) {
+  const o = x && typeof x === "object" ? x : {};
+  return {
+    goals: vArr(o.goals, (g) => ({ text: vStr(asObj(g).text, NPC_GOAL_TEXT_MAX, "") }), MAX_NPC_AGENT_GOALS),
+    recentIncidents: vArr(
+      o.recentIncidents,
+      (i) => ({ summary: vStr(asObj(i).summary, NPC_DIALOGUE_MAX, ""), tick: vInt(asObj(i).tick, 0, 1e9, 0) }),
+      MAX_NPC_AGENT_INCIDENTS,
+    ),
+    summaryPointer: vStr(o.summaryPointer, NPC_SUMMARY_MAX, ""),
+  };
+}
+
+export function vNpcProposalStep(x) {
+  const o = asObj(x);
+  const kind = vEnum(o.kind, ["talk", "move"]); // throws on anything else
+  return kind === "move"
+    ? { kind, targetId: vEnum(o.targetId, ZONE_IDS) } // throws on unknown zone
+    : { kind, targetId: vEnum(o.targetId, NPC_IDS) }; // talk targets a real npc
+}
+
+export function vNpcProposal(x) {
+  const o = asObj(x);
+  return {
+    npcId: vEnum(o.npcId, NPC_IDS), // throws on a non-real npc id
+    currentGoal: vStr(o.currentGoal, NPC_GOAL_TEXT_MAX, ""),
+    dialogueLine: vStr(o.dialogueLine, NPC_DIALOGUE_MAX, ""),
+    step: vNpcProposalStep(o.step), // throws → vNpcProposals drops this one
+    memoryPatch: vNpcMemory(o.memoryPatch),
+    source: vEnum(o.source, ["fallback", "gemma"], "fallback"),
+  };
+}
+
+export function vNpcProposals(x) {
+  return vArr(x, vNpcProposal, NPC_IDS.length);
 }
 
 // ── Game shapes ───────────────────────────────────────────────────────

@@ -69,6 +69,7 @@ import * as retention from "./retention.js";
 import express from "./router.js";
 import * as store from "./store.js";
 import * as sigmacraft from "./sigmacraft.js";
+import { attachNpcPlanner } from "./sigmacraft-npc-agents.js";
 import * as storytellerLoop from "./storyteller-loop.js";
 import {
   guard,
@@ -3123,6 +3124,19 @@ const oracle = attachOracleBazaar(app, {
   hmac: { sign: hmacSign, eq: timingSafeEq, key: MMO_HMAC_KEY },
 });
 superviseInterval("oracle.sweep", () => oracle.sweep(), 15_000);
+
+// Gemma NPC proposal lane (integrate-this PR7) — its OWN supervised 15s loop,
+// strictly OFF the 3s world tick. Proposes bounded controller state for one NPC
+// per cycle (deterministic fallback by default; live Gemma env-gated). A slow or
+// failing model call is contained here and can never enter the tick budget.
+const npcPlanner = attachNpcPlanner({ store });
+superviseInterval(
+  "npc.plan",
+  () => {
+    npcPlanner.plan().catch((err) => console.error(`[npc.plan] ${err?.message || err}`));
+  },
+  15_000,
+);
 
 // ── Static ────────────────────────────────────────────────────────────
 // client/ is the web root; /shared exposes the sim modules for browser

@@ -8,6 +8,7 @@
 // zones exist before mutating.
 
 import { ZONE_BY_ID } from "../shared/zones.js";
+import { NPCS } from "../shared/npc-defs.js";
 import {
   MAX_SIGMACRAFT_PENDING_INTENTS,
   MAX_SIGMACRAFT_TICK_INTENTS,
@@ -24,7 +25,19 @@ function ensureState(world) {
   if (!Array.isArray(s.recentEvents)) s.recentEvents = [];
   if (!s.actorPlaces || typeof s.actorPlaces !== "object") s.actorPlaces = {};
   if (!s.vcsAccounts || typeof s.vcsAccounts !== "object") s.vcsAccounts = {};
+  if (!s.npcAgents || typeof s.npcAgents !== "object") s.npcAgents = {};
+  if (!Number.isFinite(s.npcCursor)) s.npcCursor = 0;
   return s;
+}
+
+// Is there an unconsumed NPC plan waiting to surface?
+function hasUnconsumedNpcPlan(sigmacraft) {
+  const agents = sigmacraft?.npcAgents;
+  if (!agents) return false;
+  for (const a of Object.values(agents)) {
+    if (a?.plan && !a.plan.consumed) return true;
+  }
+  return false;
 }
 
 function appendEvent(sigmacraft, tick, text) {
@@ -72,8 +85,10 @@ export function advance(ctx) {
   const world = ctx?.world;
   if (!world) return false;
   const sigmacraft = world.sigmacraft;
-  // Idle fast path: no pending work, no mutation, no dirty flag.
-  if (!sigmacraft || !Array.isArray(sigmacraft.pendingIntents) || sigmacraft.pendingIntents.length === 0) {
+  // Idle fast path: no pending player intents AND no unconsumed NPC plan → no
+  // mutation, no dirty flag (avoids ~20x world.json write amplification).
+  const hasPending = Array.isArray(sigmacraft?.pendingIntents) && sigmacraft.pendingIntents.length > 0;
+  if (!sigmacraft || (!hasPending && !hasUnconsumedNpcPlan(sigmacraft))) {
     return false;
   }
   ensureState(world);
@@ -105,6 +120,31 @@ export function advance(ctx) {
     } else if (intent.kind === "talk") {
       emit(`${actorName(token)} traded word with the locals.`);
     }
+  }
+
+  // Consume ONE bounded NPC effect per tick (integrate-this PR7). Proposals were
+  // produced + validated OFF the tick by server/sigmacraft-npc-agents.js; here we
+  // only apply a re-checked move OR surface the line. Deterministic (rotate by
+  // tick), bounded (≤1/tick), zero-network; never touches schedulePhase.
+  const npcIds = Object.keys(sigmacraft.npcAgents)
+    .filter((id) => sigmacraft.npcAgents[id]?.plan && !sigmacraft.npcAgents[id].plan.consumed)
+    .sort();
+  if (npcIds.length) {
+    const id = npcIds[tick % npcIds.length];
+    const agent = sigmacraft.npcAgents[id];
+    const npcName = NPCS[id]?.name || id;
+    if (agent.plan.step?.kind === "move") {
+      const zone = ZONE_BY_ID[agent.plan.step.targetId];
+      if (zone && world.npcs?.[id]) {
+        world.npcs[id].zoneId = zone.id;
+        emit(`${npcName} moved to ${zone.name}.`);
+      }
+    } else if (agent.plan.dialogueLine) {
+      appendEvent(sigmacraft, tick, `${npcName}: ${agent.plan.dialogueLine}`);
+      ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine });
+      if (world.npcs?.[id]) world.npcs[id].lastDialogueAt = tick;
+    }
+    agent.plan.consumed = true;
   }
   return true;
 }
