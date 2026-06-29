@@ -13,9 +13,15 @@ import {
   MAX_SIGMACRAFT_RECENT_EVENTS,
   MAX_NPC_EFFECTS_PER_TICK,
   MAX_DIRECTOR_EFFECTS_PER_TICK,
+  NPC_SUPPLY_CAP,
+  NPC_MOOD_MIN,
+  NPC_MOOD_MAX,
   createSigmacraftState,
+  deriveNextStep,
   seedSigmacraftOverworld,
 } from "../shared/sigmacraft.js";
+
+const clampMood = (v) => Math.max(NPC_MOOD_MIN, Math.min(NPC_MOOD_MAX, v));
 
 function ensureState(world) {
   if (!world.sigmacraft || typeof world.sigmacraft !== "object") {
@@ -38,12 +44,13 @@ function ensureState(world) {
   return s;
 }
 
-// Is there an unconsumed NPC plan waiting to surface?
-function hasUnconsumedNpcPlan(sigmacraft) {
+// Does any NPC still have an agenda to walk? (cursor not yet past the end)
+function hasActiveNpcAgenda(sigmacraft) {
   const agents = sigmacraft?.npcAgents;
   if (!agents) return false;
   for (const a of Object.values(agents)) {
-    if (a?.plan && !a.plan.consumed) return true;
+    const p = a?.plan;
+    if (p?.agenda && Array.isArray(p.agenda) && (p.cursor || 0) < p.agenda.length) return true;
   }
   return false;
 }
@@ -100,7 +107,7 @@ export function advance(ctx) {
   // Idle fast path: nothing pending, no NPC plan, no director beat → no work at all.
   const hasPending = Array.isArray(sigmacraft?.pendingIntents) && sigmacraft.pendingIntents.length > 0;
   const hasDirectorWork = Array.isArray(sigmacraft?.directorQueue) && sigmacraft.directorQueue.length > 0;
-  if (!sigmacraft || (!hasPending && !hasUnconsumedNpcPlan(sigmacraft) && !hasDirectorWork)) {
+  if (!sigmacraft || (!hasPending && !hasActiveNpcAgenda(sigmacraft) && !hasDirectorWork)) {
     return false;
   }
   ensureState(world);
@@ -143,13 +150,19 @@ export function advance(ctx) {
     }
   }
 
-  // Consume up to MAX_NPC_EFFECTS_PER_TICK bounded NPC effects (integrate-this
-  // PR7, scaled for the 200-agent overworld). Proposals were produced + validated
-  // OFF the tick by server/sigmacraft-npc-agents.js; here we only apply a
-  // re-checked tile move OR surface the line. Deterministic (cursor rotation),
-  // bounded, zero-network. Overworld NPCs live in sigmacraft.overworldNpcs.
+  // TACTICAL LAYER: cascade each active NPC's strategic agenda into ONE concrete
+  // primitive this tick (integrate-this PR-C). Agendas were proposed + validated OFF
+  // the tick (server/sigmacraft-npc-agents.js); here we DERIVE the next step
+  // (deriveNextStep: walk toward the objective tile, or perform the action on
+  // arrival) and apply its bounded effect on REAL npc state — tileId / supplies /
+  // moodValue — never player loot/XP/death/market. Deterministic, bounded
+  // (MAX_NPC_EFFECTS_PER_TICK), zero-network. Re-checks adjacency + tile support, so
+  // a bad agenda can't teleport or do an unsupported action. Ambient ⇒ not `dirty`.
   const npcIds = Object.keys(sigmacraft.npcAgents)
-    .filter((id) => sigmacraft.npcAgents[id]?.plan && !sigmacraft.npcAgents[id].plan.consumed)
+    .filter((id) => {
+      const p = sigmacraft.npcAgents[id]?.plan;
+      return p?.agenda && Array.isArray(p.agenda) && (p.cursor || 0) < p.agenda.length;
+    })
     .sort();
   if (npcIds.length) {
     // Own cursor (NOT the planner's npcCursor) so the two lanes never collide.
@@ -159,19 +172,51 @@ export function advance(ctx) {
       const id = npcIds[(cursor + i) % npcIds.length];
       const agent = sigmacraft.npcAgents[id];
       const rec = sigmacraft.overworldNpcs?.[id];
-      const npcName = rec?.name || id;
-      if (agent.plan.step?.kind === "move") {
-        const dest = tiles[agent.plan.step.targetId];
-        const fromTile = tiles[rec?.tileId];
-        if (dest && fromTile && fromTile.exits.includes(dest.id) && rec) {
-          rec.tileId = dest.id;
-          emit(`${npcName} moved to ${dest.name}.`);
+      if (!rec) { agent.plan.cursor = agent.plan.agenda.length; continue; }
+      const npcName = rec.name || id;
+      const step = deriveNextStep(rec, agent.plan.agenda, agent.plan.cursor || 0, tiles);
+      const here = tiles[rec.tileId];
+      switch (step.kind) {
+        case "move": {
+          // BFS already returns an adjacent hop; re-check adjacency as defense.
+          const dest = tiles[step.targetId];
+          if (dest && here && here.exits.includes(dest.id)) {
+            rec.tileId = dest.id;
+            emit(`${npcName} traveled to ${dest.name}.`);
+          }
+          break;
         }
-      } else if (agent.plan.dialogueLine) {
-        appendEvent(sigmacraft, tick, `${npcName}: ${agent.plan.dialogueLine}`);
-        ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine });
+        case "gather":
+          rec.supplies = Math.min(NPC_SUPPLY_CAP, (rec.supplies || 0) + 1);
+          emit(`${npcName} gathered supplies${here ? ` in ${here.name}` : ""}.`);
+          break;
+        case "fight":
+          rec.moodValue = clampMood((rec.moodValue ?? 50) + 4);
+          emit(`${npcName} clashed with danger${here ? ` in ${here.name}` : ""}.`);
+          break;
+        case "rest":
+          rec.moodValue = clampMood((rec.moodValue ?? 50) + 8);
+          emit(`${npcName} rested${here ? ` at ${here.name}` : ""}.`);
+          break;
+        case "craft":
+          if ((rec.supplies || 0) > 0) {
+            rec.supplies -= 1;
+            rec.moodValue = clampMood((rec.moodValue ?? 50) + 3);
+            emit(`${npcName} crafted something${here ? ` at ${here.name}` : ""}.`);
+          } else {
+            emit(`${npcName} lacks supplies to craft${here ? ` at ${here.name}` : ""}.`);
+          }
+          break;
+        case "talk":
+          if (agent.plan.dialogueLine) {
+            appendEvent(sigmacraft, tick, `${npcName}: ${agent.plan.dialogueLine}`);
+            ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine });
+          }
+          break;
+        default:
+          break; // "noop" — arrived / skipped objective
       }
-      agent.plan.consumed = true;
+      if (step.objectiveComplete) agent.plan.cursor = (agent.plan.cursor || 0) + 1;
     }
     sigmacraft.npcConsumeCursor = (cursor + applyCount) % npcIds.length;
   }

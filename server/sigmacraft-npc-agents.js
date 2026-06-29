@@ -1,15 +1,26 @@
-// Gemma NPC proposal lane (integrate-this PR7), scaled to the 200-agent
-// Sigmacraft overworld. Server-only: runs in its own supervised 15s loop, NEVER
-// in the 3s world-tick critical path, NEVER imported by shared/.
+// Agentic NPC planner (integrate-this PR-C), scaled to the 200-agent Sigmacraft
+// overworld. Server-only: runs in its own supervised 15s loop, NEVER in the 3s
+// world-tick critical path, NEVER imported by shared/.
 //
-// The planner PROPOSES bounded controller state (a goal, a line, one move/talk
-// step) for a batch of overworld NPCs per cycle; it cannot mutate the world
-// directly. Proposals pass the validate.js trust boundary and are stored under
-// world.sigmacraft.npcAgents[npcId]; a later world tick consumes bounded effects
-// (server/sigmacraft.js). The default planner is a DETERMINISTIC, zero-network
-// fallback. Live Gemma is env-gated and deferred (see callGemma).
+// TWO-LAYER PLANNING:
+//   • STRATEGIC (here, off-tick): propose a goal + an AGENDA — an ordered list of
+//     grounded objectives, each a real action (move/talk/gather/fight/rest/craft)
+//     at a real tile. Gemma (live) or a deterministic fallback (default).
+//   • TACTICAL (server/sigmacraft.js, on-tick): cascade the agenda into ONE concrete
+//     primitive per tick (walk toward the objective's tile via BFS, then perform the
+//     action when arrived), advancing the agenda cursor as objectives complete.
+//
+// The planner cannot mutate the world; proposals pass the validate.js trust boundary
+// (vNpcProposals) and are stored under world.sigmacraft.npcAgents[npcId]. The tick
+// re-checks tile existence/adjacency, so a hallucinated agenda can never teleport.
 
-import { NPC_PLAN_REUSE_TICKS, MAX_NPC_AGENT_INCIDENTS, MAX_NPC_AGENT_GOALS } from "../shared/sigmacraft.js";
+import {
+  MAX_NPC_AGENDA_STEPS,
+  MAX_NPC_AGENT_GOALS,
+  MAX_NPC_AGENT_INCIDENTS,
+  choose,
+  tileSupportsAction,
+} from "../shared/sigmacraft.js";
 import { vNpcProposals } from "./validate.js";
 import { createLlmClient } from "./llm.js";
 
@@ -22,25 +33,6 @@ function stableHash(str) {
     h = Math.imul(h, 0x01000193);
   }
   return h >>> 0;
-}
-
-// A real tile-graph neighbour of the NPC's current tile, biased toward where
-// actors are (hub pull), tie-broken deterministically by seed. Falls back to
-// staying put.
-function adjacentTileId(tileId, world, seed) {
-  const tiles = world?.sigmacraft?.map?.tiles || {};
-  const here = tiles[tileId];
-  const exits = (here?.exits || []).filter((id) => tiles[id]);
-  if (!exits.length) return tileId;
-  const places = world?.sigmacraft?.actorPlaces || {};
-  const pop = (tid) => Object.values(places).filter((v) => v === tid).length;
-  let best = exits[0];
-  let bestPop = -1;
-  for (const id of exits) {
-    const n = pop(id);
-    if (n > bestPop) { best = id; bestPop = n; }
-  }
-  return bestPop > 0 ? best : exits[seed % exits.length];
 }
 
 // Deterministic ambient lines per archetype (no Date/Math.random). <=140 chars.
@@ -62,24 +54,66 @@ function goalFor(rec, seed) {
   return String(goals[seed % goals.length]).slice(0, 96);
 }
 
+// Strategic agenda templates: an archetype's routine as a sequence of action kinds.
+// Each kind is resolved to a real, supporting target tile at build time.
+const ARCHETYPE_AGENDA = {
+  adventurer: ["fight", "rest", "talk"],
+  crafter: ["gather", "craft", "talk"],
+  bandit: ["fight", "rest"],
+  merchant: ["move", "talk", "rest"],
+  guard: ["fight", "rest"],
+  scout: ["gather", "talk"],
+  mystic: ["talk", "rest"],
+};
+
+function manhattan(a, b) {
+  return Math.abs((a?.x ?? 0) - (b?.x ?? 0)) + Math.abs((a?.y ?? 0) - (b?.y ?? 0));
+}
+
+// Pick a real tile id that SUPPORTS `kind` (so the objective is grounded), biased
+// toward tiles near `fromTile`, tie-broken deterministically by seed.
+function targetTileForAction(tiles, fromTile, kind, seed) {
+  const all = Object.values(tiles);
+  let pool;
+  if (kind === "rest" || kind === "craft" || kind === "talk") {
+    pool = all.filter((t) => t.type === "town" || t.type === "city");
+  } else if (kind === "move") {
+    pool = all.filter((t) => t.type === "town" || t.type === "city");
+  } else {
+    pool = all.filter((t) => tileSupportsAction(t, kind)); // gather / fight
+  }
+  if (!pool.length) pool = all;
+  // Nearness bias: prefer the closer half so journeys stay reasonable.
+  const near = pool
+    .map((t) => ({ t, d: manhattan(fromTile, t) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, Math.max(3, Math.ceil(pool.length / 2)))
+    .map((x) => x.t);
+  return choose(near, `${seed}:${kind}`).id;
+}
+
+// Build a deterministic, grounded agenda for an NPC. Each objective = an action at a
+// real supporting tile. PURE given (rec, tiles, seed).
+function buildFallbackAgenda(rec, tiles, seed) {
+  const here = tiles[rec.tileId];
+  const seq = (ARCHETYPE_AGENDA[rec?.archetype] || ["talk", "rest"]).slice(0, MAX_NPC_AGENDA_STEPS);
+  return seq.map((kind, i) => ({ kind, targetTileId: targetTileForAction(tiles, here, kind, `${seed}:${i}`) }));
+}
+
 // Pure given (npcId, world) — the always-on default. No Date/Math.random.
 export function makeNpcFallbackProposal(npcId, world) {
-  const rec = world?.sigmacraft?.overworldNpcs?.[npcId];
+  const s = world?.sigmacraft;
+  const rec = s?.overworldNpcs?.[npcId];
   if (!rec) return null;
-  const tick = world?.sigmacraft?.tick || 0;
+  const tiles = s?.map?.tiles || {};
+  const tick = s?.tick || 0;
   const seed = stableHash(`${npcId}:${tick}:${rec.tileId}`);
-  // Roamers (adventurer/scout/bandit/merchant) wander more than settled folk.
-  const roamer = ["adventurer", "scout", "bandit", "merchant"].includes(rec.archetype);
-  const wantsMove = roamer ? seed % 2 === 0 : seed % 3 === 0;
-  const step = wantsMove
-    ? { kind: "move", targetId: adjacentTileId(rec.tileId, world, seed) }
-    : { kind: "talk", targetId: npcId };
   const goal = goalFor(rec, seed);
   return {
     npcId,
     currentGoal: goal,
     dialogueLine: archetypeLine(rec, seed),
-    step,
+    agenda: buildFallbackAgenda(rec, tiles, seed),
     memoryPatch: {
       goals: [{ text: goal }],
       recentIncidents: [{ summary: `near ${rec.tileId}`, tick }],
@@ -89,7 +123,8 @@ export function makeNpcFallbackProposal(npcId, world) {
   };
 }
 
-// Merge a validated proposal into stored controller state; roll + cap memory.
+// Merge a validated proposal into stored controller state. A NEW agenda resets the
+// cursor to 0 (the tick walks it from the top); memory rolls + caps.
 function mergePlan(existing, clean, tick) {
   const prevMem = existing?.memory || {};
   const incidents = [
@@ -98,12 +133,12 @@ function mergePlan(existing, clean, tick) {
   ].slice(-MAX_NPC_AGENT_INCIDENTS);
   return {
     plan: {
-      step: clean.step,
-      currentGoal: clean.currentGoal,
+      goal: clean.currentGoal,
+      agenda: clean.agenda,
+      cursor: 0,
       dialogueLine: clean.dialogueLine,
       source: clean.source,
       plannedAtTick: tick,
-      consumed: false,
     },
     memory: {
       goals: clean.memoryPatch.goals.slice(0, MAX_NPC_AGENT_GOALS),
@@ -113,43 +148,68 @@ function mergePlan(existing, clean, tick) {
   };
 }
 
+// A short list of nearby, grounded candidate tiles for the live prompt, so Gemma
+// picks REAL ids (one or two of each relevant type, nearest first).
+function nearbyTileMenu(rec, tiles) {
+  const here = tiles[rec.tileId];
+  const pick = (pred, n) =>
+    Object.values(tiles)
+      .filter(pred)
+      .map((t) => ({ t, d: manhattan(here, t) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, n)
+      .map((x) => `${x.t.id} (${x.t.type})`);
+  return [
+    ...pick((t) => tileSupportsAction(t, "fight"), 2),
+    ...pick((t) => tileSupportsAction(t, "gather"), 2),
+    ...pick((t) => t.type === "town" || t.type === "city", 2),
+  ].join(", ");
+}
+
 // Live Gemma hook (Phase D). Reached only when NPC_PLANNER_LIVE=1 AND the shared
-// Cerebras seam is available (key set + breaker closed); default OFF ⇒ never
-// invoked, so tests stay socket-free. The seam caps concurrency over the 200-agent
-// fan-out and trips to fallback on provider failure. Output is mapped to the SAME
-// bounded proposal shape and still passes vNpcProposals + apply-time adjacency, so
-// a hallucinated move can never teleport an NPC — at worst it degrades to "talk".
+// Cerebras seam is available; default OFF ⇒ never invoked, so tests stay socket-free.
+// Asks for a STRATEGIC agenda; the reply is mapped to the bounded agenda shape and
+// still passes vNpcProposals + the tick's apply-time re-checks (no teleport, no
+// unsupported action — the tactical layer degrades any bad objective safely).
 async function callGemma(npcId, world, llm) {
   const s = world?.sigmacraft;
   const rec = s?.overworldNpcs?.[npcId];
   if (!rec) return null;
   const tiles = s?.map?.tiles || {};
   const here = tiles[rec.tileId];
-  const exits = (here?.exits || []).filter((id) => tiles[id]);
-  const exitDesc = exits.map((id) => `${id} (${tiles[id]?.name})`).join(", ") || "none";
+  const menu = nearbyTileMenu(rec, tiles);
   const system =
-    "You control ONE NPC in a fantasy realm. Reply ONLY with compact JSON: " +
-    '{"goal": string<=80, "line": string<=140, "action": "move" or "talk", "target": string}. ' +
-    "For action=move, target MUST be exactly one of the listed exit tile ids. " +
-    "For action=talk, omit target. No prose, no markdown.";
+    "You are ONE NPC in a fantasy realm. Plan a short AGENDA — 2 to 4 steps the NPC " +
+    "will pursue over time. Reply ONLY with compact JSON: " +
+    '{"goal": string<=80, "line": string<=140, "agenda": [{"action": one of ' +
+    '"move"|"talk"|"gather"|"fight"|"rest"|"craft", "target": tileId}]}. ' +
+    "Each target MUST be a tile id from the provided list. gather=wilds/dungeon/ruins, " +
+    "fight=dangerous tiles, rest/craft=town/city. No prose, no markdown.";
   const user =
     `NPC ${rec.name} (${rec.archetypeLabel || rec.archetype}, faction ${rec.faction}). ` +
-    `Persona: ${rec.persona}. At tile ${rec.tileId} (${here?.name}, danger ${here?.danger ?? "?"}). ` +
-    `Exits: ${exitDesc}. Goals: ${(rec.goals || []).join("; ")}. ` +
-    "Choose the next bounded action and a short in-character line.";
-  const reply = await llm.chat({ system, user, json: true, maxTokens: 200 });
+    `Persona: ${rec.persona}. At ${rec.tileId} (${here?.name}). Supplies ${rec.supplies ?? 0}, mood ${rec.moodValue ?? 50}. ` +
+    `Nearby tiles you may target: ${menu || "none"}. Long-term goals: ${(rec.goals || []).join("; ")}. ` +
+    "Plan an agenda that fits this character.";
+  const reply = await llm.chat({ system, user, json: true, maxTokens: 320 });
   const tick = s.tick || 0;
-  const target = String(reply?.target || "");
-  const step =
-    reply?.action === "move" && exits.includes(target)
-      ? { kind: "move", targetId: target }
-      : { kind: "talk", targetId: npcId }; // invalid/absent move target degrades to talk
+  const rawAgenda = Array.isArray(reply?.agenda) ? reply.agenda : [];
+  const agenda = rawAgenda
+    .slice(0, MAX_NPC_AGENDA_STEPS)
+    .map((o) => {
+      const kind = o?.action;
+      const targetTileId = o?.target;
+      const step = { kind };
+      if (typeof targetTileId === "string" && tiles[targetTileId]) step.targetTileId = targetTileId;
+      return step;
+    });
   const goal = String(reply?.goal || goalFor(rec, tick)).slice(0, 96);
+  // If the model gave nothing usable, fall back to a grounded agenda.
+  const finalAgenda = agenda.length ? agenda : buildFallbackAgenda(rec, tiles, stableHash(`${npcId}:${tick}`));
   return {
     npcId,
     currentGoal: goal,
     dialogueLine: String(reply?.line || "").slice(0, 140),
-    step,
+    agenda: finalAgenda,
     memoryPatch: {
       goals: [{ text: goal }],
       recentIncidents: [{ summary: `near ${rec.tileId}`, tick }],
@@ -159,6 +219,11 @@ async function callGemma(npcId, world, llm) {
   };
 }
 
+// Does this agent still have an agenda to pursue? (cursor not yet past the end)
+function agendaInProgress(plan) {
+  return !!plan?.agenda && Array.isArray(plan.agenda) && Number.isFinite(plan.cursor) && plan.cursor < plan.agenda.length;
+}
+
 export function attachNpcPlanner({ store, env = process.env, llm = createLlmClient({ env }) } = {}) {
   const live = env.NPC_PLANNER_LIVE === "1";
   const envMax = Number(env.SIGMACRAFT_NPC_MAX_PER_CYCLE);
@@ -166,8 +231,6 @@ export function attachNpcPlanner({ store, env = process.env, llm = createLlmClie
   async function planOne(npcId, world) {
     let proposal = null;
     try {
-      // Live only when explicitly enabled AND the seam is currently available;
-      // otherwise the deterministic fallback (no network) — same default as PR7.
       proposal =
         live && llm.available()
           ? await callGemma(npcId, world, llm)
@@ -177,7 +240,7 @@ export function attachNpcPlanner({ store, env = process.env, llm = createLlmClie
     }
     if (!proposal) return false;
     const clean = vNpcProposals([proposal])[0]; // trust boundary; drops if malformed
-    if (!clean) return false;
+    if (!clean || !clean.agenda.length) return false; // an empty agenda is no plan
     const s = world.sigmacraft;
     s.npcAgents[clean.npcId] = mergePlan(s.npcAgents[clean.npcId], clean, s.tick || 0);
     return true;
@@ -189,35 +252,27 @@ export function attachNpcPlanner({ store, env = process.env, llm = createLlmClie
     const s = world.sigmacraft;
     if (!s.npcAgents || typeof s.npcAgents !== "object") s.npcAgents = {};
     if (!Number.isFinite(s.npcCursor)) s.npcCursor = 0;
-    const tick = s.tick || 0;
 
     const ordered = Object.keys(s.overworldNpcs || {}).sort();
     if (!ordered.length) return;
-    // Auto-size the batch so the whole population refreshes within the reuse
-    // window (e.g. 200 / 5 = 40 per 15s cycle) rather than ~50 min at 1/cycle.
-    const maxPerCycle = Math.max(1, envMax > 0 ? envMax : Math.ceil(ordered.length / NPC_PLAN_REUSE_TICKS));
+    // Auto-size the batch. With multi-tick agendas an NPC only re-plans when its
+    // agenda is exhausted, so this caps how many fresh agendas we mint per cycle.
+    const maxPerCycle = Math.max(1, envMax > 0 ? envMax : Math.ceil(ordered.length / 5));
     const start = ((s.npcCursor % ordered.length) + ordered.length) % ordered.length;
     let planned = 0;
     for (let i = 0; i < ordered.length && planned < maxPerCycle; i++) {
       const id = ordered[(start + i) % ordered.length];
-      const existing = s.npcAgents[id]?.plan;
-      // Skip an NPC still proceeding on a fresh, unconsumed plan (reuse window).
-      if (existing && tick - (existing.plannedAtTick || 0) < NPC_PLAN_REUSE_TICKS && !existing.consumed) {
-        continue;
-      }
+      // Skip an NPC that's still walking its current agenda — let it finish.
+      if (agendaInProgress(s.npcAgents[id]?.plan)) continue;
       if (await planOne(id, world)) {
         planned += 1;
         s.npcCursor = (ordered.indexOf(id) + 1) % ordered.length;
       }
     }
-    // NPC plans are ambient and regenerable from seed, so they live in-memory
-    // ONLY. store.getWorldState() hands out the live world ref, so planOne's
-    // writes are already visible to the fast lane and snapshots. We deliberately
-    // do NOT putWorldState here: persisting ambient NPC churn every planner cycle
-    // would rewrite world.json on an idle/player-less server and defeat idle
-    // quiescence (the persist signal lives in advance(), gated to player intents —
-    // see server/sigmacraft.js). A future option is a throttled 60s checkpoint on
-    // the legacy lane if NPC memory ever needs to survive restart.
+    // Ambient + regenerable ⇒ IN-MEMORY ONLY. No store.putWorldState here: persisting
+    // agenda churn every cycle would rewrite world.json on an idle/player-less server
+    // and defeat idle quiescence (the persist signal lives in advance(), gated to
+    // player intents — see server/sigmacraft.js).
   }
 
   return { plan };

@@ -1,8 +1,8 @@
-// SIGMA ABYSS — NPC plan consumption by the world tick (PR7, overworld + batch).
-// advance() applies NPC ambient effects IN-MEMORY but returns false for them: NPC
-// churn is regenerable from seed and must not raise the world.json persist signal
-// (idle quiescence — see server/sigmacraft.js advance()). Only player intents
-// return true. These tests assert BOTH the in-memory effect and the false signal.
+// SIGMA ABYSS — NPC agenda cascade on the world tick (PR-C, two-layer planning).
+// advance() walks each NPC's strategic agenda one tactical primitive per tick:
+// move toward the objective tile, then perform the action on arrival, advancing the
+// cursor. Effects mutate REAL npc state (tileId/supplies/moodValue) IN-MEMORY but
+// never raise the persist signal (idle quiescence). Only player intents return true.
 // Run: node --test test/unit/npc-agents-tick.test.js
 
 import assert from "node:assert/strict";
@@ -10,76 +10,117 @@ import { describe, test } from "node:test";
 
 import { advance } from "../../server/sigmacraft.js";
 import { freshWorld } from "../../server/world-tick.js";
-import { MAX_NPC_EFFECTS_PER_TICK } from "../../shared/sigmacraft.js";
+import { MAX_NPC_EFFECTS_PER_TICK, NPC_SUPPLY_CAP } from "../../shared/sigmacraft.js";
 
 function feedStore() {
   const feed = [];
   return { pushFeed: (e) => feed.push(e), feed };
 }
 const npcIds = (w) => Object.keys(w.sigmacraft.overworldNpcs).sort();
-function planFor(w, id, step, line = "") {
+// Install a single-objective agenda whose target is the NPC's CURRENT tile, so the
+// terminal action fires on the first tick (no travel needed) — keeps tests crisp.
+function agendaHere(w, id, kind) {
+  const rec = w.sigmacraft.overworldNpcs[id];
   w.sigmacraft.npcAgents[id] = {
-    plan: { step, currentGoal: "g", dialogueLine: line, source: "fallback", plannedAtTick: 0, consumed: false },
+    plan: { goal: "g", agenda: [{ kind, targetTileId: rec.tileId }], cursor: 0, dialogueLine: "hi", source: "fallback", plannedAtTick: 0 },
     memory: { goals: [], recentIncidents: [], summaryPointer: "" },
   };
+  return rec;
 }
+// Pick a tile of a given type (so action preconditions are satisfiable).
+const tileOfType = (w, type) => Object.values(w.sigmacraft.map.tiles).find((t) => t.type === type);
 
-describe("advance() consumes overworld NPC plans, bounded", () => {
-  test("idle world with no plans/intents does not mutate", () => {
+describe("advance() cascades NPC agendas, bounded + ambient", () => {
+  test("idle world with no agenda/intents does not mutate", () => {
     const w = freshWorld();
     assert.equal(advance({ world: w }), false);
     assert.equal(w.sigmacraft.tick, 0);
   });
 
-  test("a tile-move plan moves the overworld NPC once (in-memory) but does NOT dirty the world", () => {
+  test("a gather objective at a supporting tile bumps supplies (in-memory) but is NOT dirty", () => {
     const w = freshWorld();
     const id = npcIds(w)[0];
-    const from = w.sigmacraft.overworldNpcs[id].tileId;
-    const dest = w.sigmacraft.map.tiles[from].exits[0];
-    planFor(w, id, { kind: "move", targetId: dest });
+    const wilds = tileOfType(w, "wilds");
+    const rec = w.sigmacraft.overworldNpcs[id];
+    rec.tileId = wilds.id; // stand on a gather-supporting tile
+    agendaHere(w, id, "gather");
     const store = feedStore();
-    // NPC ambient churn applies in-memory but is not a persist signal → false.
     assert.equal(advance({ world: w, store }), false, "npc-only tick is not dirty");
-    assert.equal(w.sigmacraft.overworldNpcs[id].tileId, dest, "npc still moved to the planned tile");
-    assert.equal(w.sigmacraft.npcAgents[id].plan.consumed, true);
-    assert.equal(advance({ world: w, store }), false, "no work left → idle");
+    assert.equal(rec.supplies, 1, "gathered one supply");
+    assert.equal(w.sigmacraft.npcAgents[id].plan.cursor, 1, "objective complete → cursor advanced");
   });
 
-  test("a talk plan surfaces exactly one npc_dialogue feed entry", () => {
+  test("a rest objective at a safe tile raises mood and completes the agenda", () => {
     const w = freshWorld();
     const id = npcIds(w)[0];
-    planFor(w, id, { kind: "talk", targetId: id }, "The omens are uneasy.");
+    const rec = w.sigmacraft.overworldNpcs[id];
+    rec.tileId = w.sigmacraft.map.townTileId; // town = safe, rest-supporting
+    rec.moodValue = 50;
+    agendaHere(w, id, "rest");
+    advance({ world: w, store: feedStore() });
+    assert.ok(rec.moodValue > 50, "mood recovered");
+    assert.equal(advance({ world: w, store: feedStore() }), false, "agenda done → idle");
+  });
+
+  test("a craft objective consumes a supply when available", () => {
+    const w = freshWorld();
+    const id = npcIds(w)[0];
+    const rec = w.sigmacraft.overworldNpcs[id];
+    rec.tileId = w.sigmacraft.map.townTileId; // craft-supporting
+    rec.supplies = 2;
+    agendaHere(w, id, "craft");
+    advance({ world: w, store: feedStore() });
+    assert.equal(rec.supplies, 1, "one supply consumed by crafting");
+  });
+
+  test("a talk objective surfaces exactly one npc_dialogue feed entry", () => {
+    const w = freshWorld();
+    const id = npcIds(w)[0];
+    agendaHere(w, id, "talk");
     const store = feedStore();
     advance({ world: w, store });
     const dlg = store.feed.filter((e) => e.kind === "npc_dialogue");
     assert.equal(dlg.length, 1);
-    assert.equal(dlg[0].detail, "The omens are uneasy.");
+  });
+
+  test("the NPC walks toward a distant objective one adjacent hop per tick (no teleport)", () => {
+    const w = freshWorld();
+    const id = npcIds(w)[0];
+    const rec = w.sigmacraft.overworldNpcs[id];
+    const start = rec.tileId;
+    // target a far tile; first tick must be an ADJACENT hop, not the target itself
+    const far = Object.keys(w.sigmacraft.map.tiles).find(
+      (t) => t !== start && !w.sigmacraft.map.tiles[start].exits.includes(t),
+    );
+    w.sigmacraft.npcAgents[id] = {
+      plan: { goal: "g", agenda: [{ kind: "move", targetTileId: far }], cursor: 0, dialogueLine: "", source: "fallback", plannedAtTick: 0 },
+      memory: { goals: [], recentIncidents: [], summaryPointer: "" },
+    };
+    advance({ world: w, store: feedStore() });
+    assert.notEqual(rec.tileId, far, "did not teleport to the far tile");
+    assert.ok(w.sigmacraft.map.tiles[start].exits.includes(rec.tileId), "moved to an adjacent tile toward the target");
   });
 
   test("applies at most MAX_NPC_EFFECTS_PER_TICK effects per tick", () => {
     const w = freshWorld();
-    const ids = npcIds(w).slice(0, MAX_NPC_EFFECTS_PER_TICK + 8); // 20 plans
-    for (const id of ids) planFor(w, id, { kind: "talk", targetId: id }, "hi");
+    const ids = npcIds(w).slice(0, MAX_NPC_EFFECTS_PER_TICK + 8); // 20 agendas
+    for (const id of ids) agendaHere(w, id, "talk");
     const store = feedStore();
     advance({ world: w, store });
-    const consumed = ids.filter((id) => w.sigmacraft.npcAgents[id].plan.consumed).length;
-    assert.equal(consumed, MAX_NPC_EFFECTS_PER_TICK, "exactly the cap consumed in one tick");
-    // The rest drain over subsequent ticks. advance() returns false throughout
-    // (NPC-only), so drive a fixed number of ticks rather than looping on dirty.
-    for (let t = 0; t < 4; t++) assert.equal(advance({ world: w, store }), false, "npc drain is not dirty");
-    assert.equal(ids.every((id) => w.sigmacraft.npcAgents[id].plan.consumed), true);
+    const advanced = ids.filter((id) => (w.sigmacraft.npcAgents[id].plan.cursor || 0) > 0).length;
+    assert.equal(advanced, MAX_NPC_EFFECTS_PER_TICK, "exactly the cap advanced in one tick");
   });
 
-  test("a move plan to a non-adjacent tile does not mutate but is still consumed", () => {
+  test("supplies never exceed the cap across repeated gathers", () => {
     const w = freshWorld();
     const id = npcIds(w)[0];
-    const from = w.sigmacraft.overworldNpcs[id].tileId;
-    const far = Object.keys(w.sigmacraft.map.tiles).find(
-      (t) => t !== from && !w.sigmacraft.map.tiles[from].exits.includes(t),
-    );
-    planFor(w, id, { kind: "move", targetId: far });
-    assert.equal(advance({ world: w, store: feedStore() }), false, "npc-only tick is not dirty");
-    assert.equal(w.sigmacraft.overworldNpcs[id].tileId, from, "no teleport for a non-adjacent tile");
-    assert.equal(w.sigmacraft.npcAgents[id].plan.consumed, true, "still consumed (no retry loop)");
+    const wilds = tileOfType(w, "wilds");
+    const rec = w.sigmacraft.overworldNpcs[id];
+    rec.tileId = wilds.id;
+    for (let i = 0; i < NPC_SUPPLY_CAP + 3; i++) {
+      agendaHere(w, id, "gather"); // fresh single-gather agenda each round
+      advance({ world: w, store: feedStore() });
+    }
+    assert.equal(rec.supplies, NPC_SUPPLY_CAP, "supplies clamped at the cap");
   });
 });
