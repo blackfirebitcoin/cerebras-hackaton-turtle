@@ -244,6 +244,8 @@ export function vNpcAgendaStep(x) {
   const step = { kind };
   if (o.targetTileId !== undefined && o.targetTileId !== null && o.targetTileId !== "") {
     step.targetTileId = vTileId(o.targetTileId); // throws → this objective is dropped
+  } else if (kind === "move") {
+    fail("move objective needs a targetTileId"); // a destination-less move is a no-op slot → drop it
   }
   return step;
 }

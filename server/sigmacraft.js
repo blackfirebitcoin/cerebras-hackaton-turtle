@@ -19,6 +19,7 @@ import {
   createSigmacraftState,
   deriveNextStep,
   seedSigmacraftOverworld,
+  tileSupportsAction,
 } from "../shared/sigmacraft.js";
 
 const clampMood = (v) => Math.max(NPC_MOOD_MIN, Math.min(NPC_MOOD_MAX, v));
@@ -118,9 +119,17 @@ export function advance(ctx) {
 
   // Mirror each resolved event into the existing capped feed.json (Captain's
   // Log path) as well as the in-world ring buffer (integrate-this step 10).
+  // `emit` is for PLAYER-driven narration → persists. `emitAmbient` is for
+  // NPC/director flavor → live in the ring + feed but NEVER forces a disk write, so
+  // an idle/player-less server stays write-quiescent on feed.json/players.json too
+  // (the disk analogue of the world.json idle guard; PSU power safety).
   const emit = (text) => {
     appendEvent(sigmacraft, tick, text);
     ctx?.store?.pushFeed?.({ kind: "narrative", name: "Sigmacraft", detail: text });
+  };
+  const emitAmbient = (text) => {
+    appendEvent(sigmacraft, tick, text);
+    ctx?.store?.pushFeed?.({ kind: "narrative", name: "Sigmacraft", detail: text }, { persist: false });
   };
 
   const tiles = sigmacraft.map?.tiles || {};
@@ -176,45 +185,48 @@ export function advance(ctx) {
       const npcName = rec.name || id;
       const step = deriveNextStep(rec, agent.plan.agenda, agent.plan.cursor || 0, tiles);
       const here = tiles[rec.tileId];
-      switch (step.kind) {
+      // Terminal actions re-check tile support at apply time (deriveNextStep already
+      // gates this; the redundant guard keeps the apply path honest as defense-in-depth).
+      const supported = step.kind === "move" || step.kind === "talk" || tileSupportsAction(here, step.kind);
+      switch (supported ? step.kind : "noop") {
         case "move": {
           // BFS already returns an adjacent hop; re-check adjacency as defense.
           const dest = tiles[step.targetId];
           if (dest && here && here.exits.includes(dest.id)) {
             rec.tileId = dest.id;
-            emit(`${npcName} traveled to ${dest.name}.`);
+            emitAmbient(`${npcName} traveled to ${dest.name}.`);
           }
           break;
         }
         case "gather":
           rec.supplies = Math.min(NPC_SUPPLY_CAP, (rec.supplies || 0) + 1);
-          emit(`${npcName} gathered supplies${here ? ` in ${here.name}` : ""}.`);
+          emitAmbient(`${npcName} gathered supplies${here ? ` in ${here.name}` : ""}.`);
           break;
         case "fight":
           rec.moodValue = clampMood((rec.moodValue ?? 50) + 4);
-          emit(`${npcName} clashed with danger${here ? ` in ${here.name}` : ""}.`);
+          emitAmbient(`${npcName} clashed with danger${here ? ` in ${here.name}` : ""}.`);
           break;
         case "rest":
           rec.moodValue = clampMood((rec.moodValue ?? 50) + 8);
-          emit(`${npcName} rested${here ? ` at ${here.name}` : ""}.`);
+          emitAmbient(`${npcName} rested${here ? ` at ${here.name}` : ""}.`);
           break;
         case "craft":
           if ((rec.supplies || 0) > 0) {
             rec.supplies -= 1;
             rec.moodValue = clampMood((rec.moodValue ?? 50) + 3);
-            emit(`${npcName} crafted something${here ? ` at ${here.name}` : ""}.`);
+            emitAmbient(`${npcName} crafted something${here ? ` at ${here.name}` : ""}.`);
           } else {
-            emit(`${npcName} lacks supplies to craft${here ? ` at ${here.name}` : ""}.`);
+            emitAmbient(`${npcName} lacks supplies to craft${here ? ` at ${here.name}` : ""}.`);
           }
           break;
         case "talk":
           if (agent.plan.dialogueLine) {
             appendEvent(sigmacraft, tick, `${npcName}: ${agent.plan.dialogueLine}`);
-            ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine });
+            ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine }, { persist: false });
           }
           break;
         default:
-          break; // "noop" — arrived / skipped objective
+          break; // "noop" — arrived / skipped / unsupported objective
       }
       if (step.objectiveComplete) agent.plan.cursor = (agent.plan.cursor || 0) + 1;
     }
@@ -239,9 +251,9 @@ export function advance(ctx) {
           title: beat.title || sigmacraft.objective?.title || "",
           prompt: beat.text || sigmacraft.objective?.prompt || "",
         };
-        emit(`Director: ${beat.title || beat.text}`);
+        emitAmbient(`Director: ${beat.title || beat.text}`);
       } else {
-        emit(beat.text || beat.title || "The realm stirs.");
+        emitAmbient(beat.text || beat.title || "The realm stirs.");
       }
       gm.beats = (gm.beats || 0) + 1;
       gm.lastBeatKind = beat.kind;
