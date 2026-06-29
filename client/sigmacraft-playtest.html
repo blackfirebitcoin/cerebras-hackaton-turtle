@@ -67,6 +67,12 @@
   button.act:hover { background: rgba(127,196,165,.22); border-color: var(--teal); }
   button.act.rest { background: rgba(216,166,87,.10); }
   button.act.talk { background: rgba(150,150,220,.12); }
+  button.act.recruit { background: rgba(127,196,165,.14); }
+  button.act.tiny { padding: .1rem .4rem; font-size: .8em; }
+  #tavern-wrap { margin-top: .6rem; padding: .5rem; border: 1px solid rgba(127,196,165,.25); border-radius: 8px; background: rgba(127,196,165,.05); }
+  .party-hd { font-weight: 600; margin-bottom: .3rem; }
+  .party-list { list-style: none; padding: 0; margin: .2rem 0; }
+  .party-list li { padding: .12rem 0; }
   .pending { color: var(--amber); font-size: 12px; min-height: 16px; }
   .obj { font-size: 12px; color: #e7d9b8; border-left: 2px solid var(--amber); padding-left: 8px; margin: 4px 0; }
   .occ { color: var(--muted); font-size: 11px; }
@@ -113,6 +119,12 @@
 
     <h2>Who's Here</h2>
     <div class="occ" id="occupants"></div>
+
+    <div id="tavern-wrap" style="display:none">
+      <h2>🍺 Tavern — Party Finding</h2>
+      <div class="party" id="party"></div>
+      <div class="recruits" id="recruits"></div>
+    </div>
 
     <h2>Recent Events</h2>
     <ul id="events"><li class="dim">the realm stirs…</li></ul>
@@ -233,12 +245,40 @@ function render_side() {
   $("occupants").innerHTML = occ.length
     ? occ.map(o => `<b>${o.name}</b>${o.kind === "npc" && o.faction ? ` <span class="dim">(${o.faction})</span>` : ""}`).join(", ")
     : '<span class="dim">no one else is here.</span>';
+  render_tavern();
   $("pending").textContent = snap?.pendingIntent
     ? `… ${snap.pendingIntent.kind}${snap.pendingIntent.targetId ? " → " + snap.pendingIntent.targetId : ""} (queued)` : "";
   const evs = (snap?.recentEvents || []).slice().reverse();
   $("events").innerHTML = evs.length
     ? evs.map(e => `<li><span class="t">t${e.tick}</span>${e.text}</li>`).join("")
     : '<li class="dim">the realm is quiet…</li>';
+}
+
+// Tavern: only at a safe town/city. Recruit co-located NPCs into your party,
+// see the roster, then (once we journey) head out to a dungeon.
+function render_tavern() {
+  const wrap = $("tavern-wrap");
+  const inTown = snap?.place && (snap.place.type === "town" || snap.place.type === "city");
+  if (!inTown) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  const party = snap?.party;
+  const members = party?.members || [];
+  $("party").innerHTML =
+    `<div class="party-hd">Party (${members.length}/4)${party?.status && party.status !== "forming" ? ` · <span class="dim">${party.status}</span>` : ""}` +
+    (members.length ? ` <button class="act tiny" id="btn-disband">Disband</button>` : "") + `</div>` +
+    (members.length
+      ? `<ul class="party-list">` + members.map(m => `<li>⚔ <b>${m.name}</b> <span class="dim">${m.archetype || ""}</span></li>`).join("") + `</ul>`
+      : `<div class="dim">No party yet — recruit some locals below.</div>`);
+  if (members.length) $("btn-disband").onclick = () => act({ kind: "disband" });
+
+  const recruits = (snap?.occupants || []).filter(o => o.kind === "npc" && o.recruitable);
+  $("recruits").innerHTML = recruits.length
+    ? `<div class="dim" style="margin:.4rem 0 .2rem">Available to hire:</div>` + recruits.map(o =>
+        `<button class="act recruit" data-id="${o.id}">+ ${o.name} <span class="dim">(${o.archetype || "?"})</span></button>`).join(" ")
+    : (members.length ? "" : `<div class="dim">No free hands here right now.</div>`);
+  for (const b of $("recruits").querySelectorAll("button.recruit")) {
+    b.onclick = () => act({ kind: "recruit", targetNpcId: b.dataset.id });
+  }
 }
 
 function render() {

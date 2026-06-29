@@ -28,7 +28,7 @@ describe("Sigmacraft state + overworld projection", () => {
   });
 
   test("intent kinds are the bounded enum", () => {
-    assert.deepEqual([...SIGMACRAFT_INTENT_KINDS].sort(), ["move", "rest", "talk"]);
+    assert.deepEqual([...SIGMACRAFT_INTENT_KINDS].sort(), ["delve", "disband", "move", "recruit", "rest", "talk"]);
   });
 
   test("snapshot projects the current tile + tile-exit move actions + windowed map", () => {

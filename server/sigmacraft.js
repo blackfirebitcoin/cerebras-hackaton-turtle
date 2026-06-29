@@ -16,6 +16,7 @@ import {
   NPC_SUPPLY_CAP,
   NPC_MOOD_MIN,
   NPC_MOOD_MAX,
+  PARTY_MAX_MEMBERS,
   createSigmacraftState,
   deriveNextStep,
   seedSigmacraftOverworld,
@@ -40,6 +41,7 @@ function ensureState(world) {
   if (!s.gameMaster || typeof s.gameMaster !== "object") {
     s.gameMaster = { status: "idle", lastBeatTick: 0, lastBeatKind: null, beats: 0 };
   }
+  if (!s.parties || typeof s.parties !== "object") s.parties = {};
   // Heal/migrate the overworld map + population for pre-overworld worlds.
   seedSigmacraftOverworld(s, s.realmId || "sigmacraft_alpha");
   return s;
@@ -156,6 +158,36 @@ export function advance(ctx) {
       emit(`${actorName(token)} rested${here ? ` at ${here.name}` : ""}.`);
     } else if (intent.kind === "talk") {
       emit(`${actorName(token)} traded word with the locals.`);
+    } else if (intent.kind === "recruit") {
+      // Tavern party-finding: hire a co-located NPC into the leader's party. The
+      // recruit's identity is SNAPSHOTTED into party state (overworld NPCs are
+      // ambient/regenerable) and partyLock pins it to the leader.
+      const leaderTile = sigmacraft.actorPlaces[token] || sigmacraft.map?.townTileId;
+      const npc = sigmacraft.overworldNpcs?.[intent.targetNpcId];
+      const party = sigmacraft.parties[token] || (sigmacraft.parties[token] = { leaderToken: token, members: [], status: "forming", targetTileId: null, createdTick: tick });
+      if (!npc) {
+        emit(`${actorName(token)} found no one by that name.`);
+      } else if (npc.tileId !== leaderTile) {
+        emit(`${npc.name} is not here to recruit.`);
+      } else if (npc.partyLock && npc.partyLock !== token) {
+        emit(`${npc.name} already rides with another party.`);
+      } else if (party.members.length >= PARTY_MAX_MEMBERS) {
+        emit(`${actorName(token)}'s party is full.`);
+      } else if (!party.members.some((m) => m.npcId === npc.id)) {
+        npc.partyLock = token;
+        party.members.push({ npcId: npc.id, name: npc.name, archetype: npc.archetype, faction: npc.faction, persona: npc.persona });
+        emit(`${npc.name} joined ${actorName(token)}'s party.`);
+      }
+    } else if (intent.kind === "disband") {
+      const party = sigmacraft.parties[token];
+      if (party) {
+        for (const m of party.members) {
+          const npc = sigmacraft.overworldNpcs?.[m.npcId];
+          if (npc && npc.partyLock === token) npc.partyLock = null;
+        }
+        delete sigmacraft.parties[token];
+        emit(`${actorName(token)} disbanded the party.`);
+      }
     }
   }
 
@@ -169,6 +201,8 @@ export function advance(ctx) {
   // a bad agenda can't teleport or do an unsupported action. Ambient ⇒ not `dirty`.
   const npcIds = Object.keys(sigmacraft.npcAgents)
     .filter((id) => {
+      // Recruited NPCs are driven by their party leader (P1), not their own agenda.
+      if (sigmacraft.overworldNpcs?.[id]?.partyLock) return false;
       const p = sigmacraft.npcAgents[id]?.plan;
       return p?.agenda && Array.isArray(p.agenda) && (p.cursor || 0) < p.agenda.length;
     })

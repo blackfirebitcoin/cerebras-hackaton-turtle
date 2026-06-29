@@ -262,6 +262,8 @@ export function attachNpcPlanner({ store, env = process.env, llm = createLlmClie
     let planned = 0;
     for (let i = 0; i < ordered.length && planned < maxPerCycle; i++) {
       const id = ordered[(start + i) % ordered.length];
+      // Skip recruited NPCs — they follow their party leader, not their own agenda.
+      if (s.overworldNpcs[id]?.partyLock) continue;
       // Skip an NPC that's still walking its current agenda — let it finish.
       if (agendaInProgress(s.npcAgents[id]?.plan)) continue;
       if (await planOne(id, world)) {

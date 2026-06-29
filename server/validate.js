@@ -213,6 +213,10 @@ export function vSigmacraftIntent(x) {
   if (kind === "move") {
     return { kind, nonce, targetId: vTileId(o.targetId) }; // throws on malformed tile id
   }
+  if (kind === "recruit") {
+    return { kind, nonce, targetNpcId: vNpcAgentId(o.targetNpcId) }; // co-located npc, re-checked at apply
+  }
+  // rest | talk | disband | delve — no target; delve uses the leader's current tile.
   return { kind, nonce };
 }
 

@@ -12,7 +12,8 @@
 export const SIGMACRAFT_SCHEMA = "sigmacraft.world.v2";
 export const SIGMACRAFT_REALM_ID = "sigmacraft_alpha";
 
-export const SIGMACRAFT_INTENT_KINDS = Object.freeze(["move", "rest", "talk"]);
+export const SIGMACRAFT_INTENT_KINDS = Object.freeze(["move", "rest", "talk", "recruit", "disband", "delve"]);
+export const PARTY_MAX_MEMBERS = 4; // recruited NPCs alongside the player leader (party of 5)
 
 export const MAX_SIGMACRAFT_PENDING_INTENTS = 128;
 export const MAX_SIGMACRAFT_TICK_INTENTS = 16;
@@ -371,6 +372,11 @@ export function createSigmacraftState() {
     // + compact game-master status. Ambient/regenerable — never persisted.
     directorQueue: [],
     gameMaster: { status: "idle", lastBeatTick: 0, lastBeatKind: null, beats: 0 },
+    // Party / dungeon-delve lane (demo): keyed by leader token. PLAYER-DRIVEN state
+    // (recruiting/journeying/delving is a durable choice), so unlike NPC ambient
+    // churn this DOES persist. Each: { leaderToken, members:[{npcId,name,...}],
+    // status:"forming"|"traveling"|"delving"|"done", targetTileId, createdTick }.
+    parties: {},
   };
 }
 
@@ -450,6 +456,8 @@ function projectOccupants(sigmacraft, currentTileId, selfToken) {
       lastLine: plan?.dialogueLine || null,
       supplies: npc.supplies ?? 0,
       mood: npc.moodValue ?? 50,
+      recruitable: !npc.partyLock, // free to hire into a party (tavern surface)
+      partyLock: npc.partyLock || null, // token of the party they belong to, if any
     });
     if (out.length >= 16) break;
   }
@@ -512,5 +520,25 @@ export function projectSigmacraftSnapshot(world, character = null, opts = {}) {
     validActions: sigmacraftValidActions(sigmacraft, currentTileId),
     pendingIntent: pending ? { kind: pending.kind, targetId: pending.targetId || null } : null,
     recentEvents: (sigmacraft.recentEvents || []).slice(-8),
+    party: token ? projectParty(sigmacraft, token) : null, // the leader's party, if any
+  };
+}
+
+// The party led by `token` (tavern/journey/delve surface), or null. Members carry
+// their identity snapshot + live tile + any last delve result.
+export function projectParty(sigmacraft, token) {
+  const p = sigmacraft?.parties?.[token];
+  if (!p) return null;
+  return {
+    leaderToken: token,
+    status: p.status || "forming",
+    targetTileId: p.targetTileId || null,
+    members: (p.members || []).map((m) => ({
+      npcId: m.npcId,
+      name: m.name,
+      archetype: m.archetype || null,
+      tileId: sigmacraft?.overworldNpcs?.[m.npcId]?.tileId || null,
+    })),
+    lastDelve: p.lastDelve || null,
   };
 }
