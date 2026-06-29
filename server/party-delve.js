@@ -9,6 +9,10 @@ import { resolvePartyEncounter } from "../shared/party-combat.js";
 import { buildPartyCombatants, ensureDemoRun } from "./party-build.js";
 import { buildDungeonEnemies, rollPartyLoot } from "./party-dungeon.js";
 
+// A cleared dungeon's spoils don't respawn for this many world ticks (~3s each).
+// The hard brake on the loot faucet, alongside HP cost + permadeath.
+export const DELVE_COOLDOWN_TICKS = 120;
+
 // FNV-1a → uint32, for a deterministic per-delve seed.
 function seedOf(str) {
   let h = 0x811c9dc5;
@@ -31,15 +35,21 @@ export function runPartyDelve({ world, store, token, character, bossDrops = null
   if (!tile) return { ok: false, error: "unknown tile" };
   if (tile.type !== "dungeon") return { ok: false, error: "not at a dungeon — travel to a dungeon tile first" };
 
-  const party = s.parties?.[token] || { leaderToken: token, members: [], status: "forming" };
+  // Always materialize the leader's party record (even solo) so per-tile cooldowns
+  // + delve history are tracked authoritatively.
+  s.parties = s.parties || {};
+  const party = s.parties[token] || (s.parties[token] = { leaderToken: token, members: [], status: "forming" });
   ensureDemoRun(character);
   if (character?.run && character.run.alive === false) {
     return { ok: false, error: "your hero has fallen — mint a new playtest run to delve again" };
   }
-  // Same-tile re-delve gate: a cleared dungeon must be left and re-entered. With the
-  // HP cost + permadeath below, this bounds the loot loop to "heal, travel, delve".
-  if (s.parties?.[token]?.status === "done" && s.parties[token].lastDelve?.tile === tile.name) {
-    return { ok: false, error: "you've already cleared this dungeon — travel onward, then return" };
+  // Per-tile cooldown: a freshly-cleared dungeon won't respawn loot for a while.
+  // Keyed by tile ID for EVERY cleared dungeon (not just the last), so an A→B→A
+  // rotation can't re-farm A. With HP cost + permadeath, the loot loop has real cost.
+  party.clearedTiles = party.clearedTiles || {};
+  const clearedAt = party.clearedTiles[tileId];
+  if (Number.isFinite(clearedAt) && (s.tick || 0) - clearedAt < DELVE_COOLDOWN_TICKS) {
+    return { ok: false, error: "this dungeon is freshly cleared — its spoils won't respawn yet" };
   }
 
   const combatants = buildPartyCombatants(party, character, (id) => s.overworldNpcs?.[id]);
@@ -72,18 +82,18 @@ export function runPartyDelve({ world, store, token, character, bossDrops = null
     }
   }
 
-  // Record the outcome on the party (player-driven → persists with the world).
-  if (s.parties?.[token]) {
-    s.parties[token].lastDelve = {
-      outcome: result.outcome,
-      rounds: result.rounds,
-      tile: tile.name,
-      kills: result.kills.length,
-      drops: loot.drops.map((d) => ({ to: d.memberName, item: d.item?.name || "loot", rarity: d.item?.rarity, fromBoss: d.fromBoss })),
-      at: s.tick || 0,
-    };
-    s.parties[token].status = result.outcome === "victory" ? "done" : "forming";
-  }
+  // Record the outcome on the party (player-driven → persists with the world). A
+  // VICTORY puts this dungeon TILE on cooldown so it can't be re-farmed by rotation.
+  party.lastDelve = {
+    outcome: result.outcome,
+    rounds: result.rounds,
+    tile: tile.name,
+    kills: result.kills.length,
+    drops: loot.drops.map((d) => ({ to: d.memberName, item: d.item?.name || "loot", rarity: d.item?.rarity, fromBoss: d.fromBoss })),
+    at: s.tick || 0,
+  };
+  if (result.outcome === "victory") party.clearedTiles[tileId] = s.tick || 0;
+  party.status = result.outcome === "victory" ? "done" : "forming";
   store?.pushFeed?.({ kind: "narrative", name: "Dungeon", detail: `Party ${result.outcome} in ${tile.name} (${result.kills.length} slain, ${kept} loot to the leader).` });
 
   return {

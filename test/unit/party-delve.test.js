@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { runPartyDelve } from "../../server/party-delve.js";
+import { advance, enqueueSigmacraftIntent } from "../../server/sigmacraft.js";
 import { ensureDemoRun } from "../../server/party-build.js";
 import { createBossDropForge } from "../../server/cerebras-boss-drops.js";
 import { freshCharacter } from "../../shared/progression.js";
@@ -77,18 +78,32 @@ describe("runPartyDelve", () => {
     }
   });
 
-  test("a cleared dungeon can't be re-delved on the same tile (faucet brake)", () => {
+  test("a freshly-cleared dungeon is on per-tile cooldown (rotation can't re-farm)", () => {
     const w = freshWorld();
     const token = "sig_e";
-    w.sigmacraft.actorPlaces[token] = dungeonTile(w).id;
-    const character = playtest(11);
-    w.sigmacraft.parties[token] = { leaderToken: token, members: [], status: "forming" };
-    const first = runPartyDelve({ world: w, store, token, character, bossDrops: boss() });
-    if (first.ok && first.outcome === "victory") {
-      const again = runPartyDelve({ world: w, store, token, character, bossDrops: boss() });
-      assert.equal(again.ok, false, "same-tile re-delve blocked after clearing");
-      assert.match(again.error, /already cleared/);
-    }
+    const A = dungeonTile(w);
+    w.sigmacraft.actorPlaces[token] = A.id;
+    // A was cleared this very tick — the cooldown must block re-entry regardless of
+    // having delved other tiles in between (the rotation bypass the review found).
+    w.sigmacraft.parties[token] = { leaderToken: token, members: [], status: "done", clearedTiles: { [A.id]: w.sigmacraft.tick || 0 } };
+    const out = runPartyDelve({ world: w, store, token, character: playtest(11), bossDrops: boss() });
+    assert.equal(out.ok, false);
+    assert.match(out.error, /respawn|freshly cleared/);
+  });
+
+  test("resting does NOT resurrect a wiped playtest hero — permadeath stands", () => {
+    const w = freshWorld();
+    const token = "sig_dead";
+    w.sigmacraft.actorPlaces[token] = w.sigmacraft.map.townTileId; // a safe town
+    const ch = playtest(99);
+    ensureDemoRun(ch);
+    ch.run.alive = false;
+    ch.run.hp = 0;
+    const healStore = { getPlayer: () => ({ character: ch }), putPlayer() {}, pushFeed() {} };
+    enqueueSigmacraftIntent(w, token, { kind: "rest", nonce: "rest1" });
+    advance({ world: w, store: healStore });
+    assert.equal(ch.run.alive, false, "a wiped hero is NOT revived by resting");
+    assert.equal(ch.run.hp, 0, "still at 0 hp — must re-mint");
   });
 
   test("a party delve resolves all members and records lastDelve", () => {

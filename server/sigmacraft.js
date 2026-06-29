@@ -171,10 +171,11 @@ export function advance(ctx) {
       // account's run (owned by live-delve) is never touched from the tick.
       const ch = ctx?.store?.getPlayer?.(token)?.character;
       const safe = here && (here.danger <= 1 || here.type === "town" || here.type === "city");
-      if (ch?.isPlaytest && ch.run && safe) {
+      // Heal a LIVING, wounded playtest hero only — resting must NEVER resurrect a
+      // wiped run (permadeath stands; a fallen hero forces a re-mint).
+      if (ch?.isPlaytest && ch.run && ch.run.alive !== false && safe) {
         const maxHp = derive(ch.run, ch).maxHp;
         ch.run.hp = Math.min(maxHp, Math.round((ch.run.hp || 0) + maxHp * 0.4));
-        if (ch.run.hp > 0) ch.run.alive = true;
         ctx?.store?.putPlayer?.(token, ch); // persist the heal
       }
       emit(`${actorName(token)} rested${here ? ` at ${here.name}` : ""}.`);
