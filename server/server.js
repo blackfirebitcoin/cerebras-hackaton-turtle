@@ -70,6 +70,7 @@ import express from "./router.js";
 import * as store from "./store.js";
 import * as sigmacraft from "./sigmacraft.js";
 import { attachNpcPlanner } from "./sigmacraft-npc-agents.js";
+import { attachDirector } from "./sigmacraft-director.js";
 import * as storytellerLoop from "./storyteller-loop.js";
 import {
   guard,
@@ -3140,6 +3141,19 @@ superviseInterval(
     npcPlanner.plan().catch((err) => console.error(`[npc.plan] ${err?.message || err}`));
   },
   15_000,
+);
+
+// Director / game-master (PR9) — ONE world-level brain proposing bounded public
+// beats off the tick, paced (see DIRECTOR_BEAT_COOLDOWN_TICKS). Deterministic
+// fallback by default; live Gemma deferred (DIRECTOR_LIVE). Its own supervised
+// loop, NOT a second world timer (PSU power safety).
+const director = attachDirector({ store });
+superviseInterval(
+  "sigmacraft.director",
+  () => {
+    director.propose().catch((err) => console.error(`[sigmacraft.director] ${err?.message || err}`));
+  },
+  30_000,
 );
 
 // ── Static ────────────────────────────────────────────────────────────

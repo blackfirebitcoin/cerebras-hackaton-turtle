@@ -12,6 +12,7 @@ import {
   MAX_SIGMACRAFT_TICK_INTENTS,
   MAX_SIGMACRAFT_RECENT_EVENTS,
   MAX_NPC_EFFECTS_PER_TICK,
+  MAX_DIRECTOR_EFFECTS_PER_TICK,
   createSigmacraftState,
   seedSigmacraftOverworld,
 } from "../shared/sigmacraft.js";
@@ -28,6 +29,10 @@ function ensureState(world) {
   if (!s.npcAgents || typeof s.npcAgents !== "object") s.npcAgents = {};
   if (!Number.isFinite(s.npcCursor)) s.npcCursor = 0;
   if (!Number.isFinite(s.npcConsumeCursor)) s.npcConsumeCursor = 0;
+  if (!Array.isArray(s.directorQueue)) s.directorQueue = [];
+  if (!s.gameMaster || typeof s.gameMaster !== "object") {
+    s.gameMaster = { status: "idle", lastBeatTick: 0, lastBeatKind: null, beats: 0 };
+  }
   // Heal/migrate the overworld map + population for pre-overworld worlds.
   seedSigmacraftOverworld(s, s.realmId || "sigmacraft_alpha");
   return s;
@@ -92,9 +97,10 @@ export function advance(ctx) {
   const world = ctx?.world;
   if (!world) return false;
   const sigmacraft = world.sigmacraft;
-  // Idle fast path: nothing pending and no NPC plan to surface → no work at all.
+  // Idle fast path: nothing pending, no NPC plan, no director beat → no work at all.
   const hasPending = Array.isArray(sigmacraft?.pendingIntents) && sigmacraft.pendingIntents.length > 0;
-  if (!sigmacraft || (!hasPending && !hasUnconsumedNpcPlan(sigmacraft))) {
+  const hasDirectorWork = Array.isArray(sigmacraft?.directorQueue) && sigmacraft.directorQueue.length > 0;
+  if (!sigmacraft || (!hasPending && !hasUnconsumedNpcPlan(sigmacraft) && !hasDirectorWork)) {
     return false;
   }
   ensureState(world);
@@ -168,6 +174,34 @@ export function advance(ctx) {
       agent.plan.consumed = true;
     }
     sigmacraft.npcConsumeCursor = (cursor + applyCount) % npcIds.length;
+  }
+
+  // Consume up to MAX_DIRECTOR_EFFECTS_PER_TICK validated game-master beats
+  // (integrate-this PR9). The Director owns NO authority: a quest_beat updates the
+  // PUBLIC objective; every kind surfaces a narrative event. Proposals were already
+  // validated OFF the tick by server/sigmacraft-director.js. Ambient/regenerable →
+  // never sets `dirty` (idle quiescence), same rule as the NPC lane.
+  if (Array.isArray(sigmacraft.directorQueue) && sigmacraft.directorQueue.length) {
+    const beats = sigmacraft.directorQueue.splice(0, MAX_DIRECTOR_EFFECTS_PER_TICK);
+    const gm =
+      sigmacraft.gameMaster ||
+      (sigmacraft.gameMaster = { status: "idle", lastBeatTick: 0, lastBeatKind: null, beats: 0 });
+    for (const beat of beats) {
+      if (beat.kind === "quest_beat") {
+        sigmacraft.objective = {
+          questId: beat.questId || sigmacraft.objective?.questId || "",
+          stageId: beat.stageId || sigmacraft.objective?.stageId || "",
+          title: beat.title || sigmacraft.objective?.title || "",
+          prompt: beat.text || sigmacraft.objective?.prompt || "",
+        };
+        emit(`Director: ${beat.title || beat.text}`);
+      } else {
+        emit(beat.text || beat.title || "The realm stirs.");
+      }
+      gm.beats = (gm.beats || 0) + 1;
+      gm.lastBeatKind = beat.kind;
+    }
+    gm.status = sigmacraft.directorQueue.length ? "proposing" : "idle";
   }
   return dirty;
 }

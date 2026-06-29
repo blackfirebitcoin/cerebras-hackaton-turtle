@@ -35,6 +35,18 @@ export const MAX_NPC_EFFECTS_PER_TICK = 12; // bounded NPC effects applied per 3
 export const MAX_NPC_PROPOSALS_PER_CYCLE = 256; // vNpcProposals batch cap (>= population)
 export const WORLD_MAP_WINDOW = 2; // Chebyshev radius of the windowed snapshot map
 export const MAX_WORLDMAP_CELLS = 64;
+
+// Director / game-master lane (PR9). ONE world-level brain proposes bounded public
+// beats off-tick; the tick consumes them into the objective + feed. It owns no
+// authority (no loot/XP/death/market) — only narrative + the public objective.
+export const DIRECTOR_KINDS = Object.freeze(["quest_beat", "rumor", "danger", "summary"]);
+export const MAX_DIRECTOR_QUEUE = 8; // validated proposals waiting for the tick
+export const MAX_DIRECTOR_EFFECTS_PER_TICK = 2; // bounded director beats applied per 3s tick
+export const MAX_DIRECTOR_PROPOSALS_PER_CYCLE = 16; // vDirectorProposals batch cap
+export const DIRECTOR_BEAT_COOLDOWN_TICKS = 10; // min ticks between fresh proposals (pacing)
+export const DIRECTOR_TITLE_MAX = 80;
+export const DIRECTOR_TEXT_MAX = 200;
+export const DIRECTOR_ID_MAX = 40;
 export const TALK_ACTION_LIMIT = 8;
 
 export const DEFAULT_SIGMACRAFT_OBJECTIVE = Object.freeze({
@@ -45,7 +57,9 @@ export const DEFAULT_SIGMACRAFT_OBJECTIVE = Object.freeze({
 });
 
 // ── Deterministic generator (FNV-1a; ported from the standalone slice) ────────
-function stableIndex(seed, modulo) {
+// Exported so server-side off-tick planners (NPC, Director) seed the SAME way and
+// stay reproducible/testable without re-implementing FNV. Pure: no Date/random.
+export function stableIndex(seed, modulo) {
   let hash = 2166136261;
   for (const char of String(seed)) {
     hash ^= char.charCodeAt(0);
@@ -53,7 +67,7 @@ function stableIndex(seed, modulo) {
   }
   return Math.abs(hash >>> 0) % modulo;
 }
-function choose(list, seed) {
+export function choose(list, seed) {
   return list[stableIndex(seed, list.length)];
 }
 
@@ -267,6 +281,10 @@ export function createSigmacraftState() {
     npcConsumeCursor: 0,
     map: null,
     overworldNpcs: {},
+    // Director / game-master lane (PR9): validated proposals waiting for the tick
+    // + compact game-master status. Ambient/regenerable — never persisted.
+    directorQueue: [],
+    gameMaster: { status: "idle", lastBeatTick: 0, lastBeatKind: null, beats: 0 },
   };
 }
 
@@ -400,6 +418,7 @@ export function projectSigmacraftSnapshot(world, character = null, opts = {}) {
     worldMap: projectWorldMap(sigmacraft, currentTileId, reachable),
     occupants: projectOccupants(sigmacraft, currentTileId, token),
     objective: sigmacraft.objective || null,
+    gameMaster: sigmacraft.gameMaster || null,
     validActions: sigmacraftValidActions(sigmacraft, currentTileId),
     pendingIntent: pending ? { kind: pending.kind, targetId: pending.targetId || null } : null,
     recentEvents: (sigmacraft.recentEvents || []).slice(-8),
