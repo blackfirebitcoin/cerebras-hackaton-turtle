@@ -21,11 +21,11 @@ function recruit(w, npcId) {
 }
 
 describe("recruit intent validation", () => {
-  test("recruit requires a well-formed npc id; disband/delve take no target", () => {
+  test("recruit requires a well-formed npc id; disband takes no target; delve is NOT an intent", () => {
     assert.equal(vSigmacraftIntent({ kind: "recruit", targetNpcId: "npc_adventurer_000" }).targetNpcId, "npc_adventurer_000");
     assert.throws(() => vSigmacraftIntent({ kind: "recruit", targetNpcId: "nope" }), /bad npc id/);
     assert.equal(vSigmacraftIntent({ kind: "disband" }).kind, "disband");
-    assert.equal(vSigmacraftIntent({ kind: "delve" }).kind, "delve");
+    assert.throws(() => vSigmacraftIntent({ kind: "delve" }), /bad enum/); // delve runs via the route, not the tick
   });
 });
 

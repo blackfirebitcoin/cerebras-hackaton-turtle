@@ -33,11 +33,29 @@ export function runPartyDelve({ world, store, token, character, bossDrops = null
 
   const party = s.parties?.[token] || { leaderToken: token, members: [], status: "forming" };
   ensureDemoRun(character);
+  if (character?.run && character.run.alive === false) {
+    return { ok: false, error: "your hero has fallen — mint a new playtest run to delve again" };
+  }
+  // Same-tile re-delve gate: a cleared dungeon must be left and re-entered. With the
+  // HP cost + permadeath below, this bounds the loot loop to "heal, travel, delve".
+  if (s.parties?.[token]?.status === "done" && s.parties[token].lastDelve?.tile === tile.name) {
+    return { ok: false, error: "you've already cleared this dungeon — travel onward, then return" };
+  }
 
   const combatants = buildPartyCombatants(party, character, (id) => s.overworldNpcs?.[id]);
   const seed = seedOf(`${token}:${tileId}:${s.tick || 0}`);
   const { enemies, level, depth } = buildDungeonEnemies(tile, combatants.length, seed);
   const result = resolvePartyEncounter({ party: combatants, enemies, seed });
+
+  // Carry HP cost + permadeath back onto the leader's run — real stakes, and the
+  // brake on the loot faucet: a wounded party must heal (rest at a safe tile) before
+  // delving again, and a wipe ends the run (re-mint to play on).
+  const playerResult = result.party.find((p) => p.isPlayer);
+  if (character?.run && playerResult) {
+    character.run.hp = playerResult.alive ? Math.max(1, Math.round(playerResult.hp)) : 0;
+    if (!playerResult.alive) character.run.alive = false;
+  }
+
   const loot = rollPartyLoot({ result, builtEnemies: enemies, party: combatants, level, depth, seed, bossDrops });
 
   // Attach the PLAYER's drops to their inventory (bounded). NPC drops are flavor in

@@ -497,6 +497,7 @@ app.post(
     const seed = crypto.randomBytes(4).readUInt32BE(0) >>> 0 || 1;
     const character = freshCharacter(seed, "Playtester");
     character.highestLevel = 60; // unlock every zone (max minLevel is 50) for free roam
+    character.isPlaytest = true; // sandbox flag — the ONLY characters the party-delve demo may touch
     character.lastSeen = Date.now();
     store.putPlayer(token, character);
     res.json({
@@ -516,6 +517,12 @@ app.post(
     const rec = token ? store.getPlayer(token) : null;
     if (!rec?.character) {
       res.status(401).json({ ok: false, error: "unknown token" });
+      return;
+    }
+    // Playtest-ONLY: this demo mutates a sandbox run (demo level/HP/permadeath). A
+    // real account must never reach it (would destroy progression / grant free loot).
+    if (!rec.character.isPlaytest) {
+      res.status(403).json({ ok: false, error: "party delve is a playtest-only demo surface" });
       return;
     }
     const world = store.getWorldState();

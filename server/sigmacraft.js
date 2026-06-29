@@ -22,6 +22,7 @@ import {
   seedSigmacraftOverworld,
   tileSupportsAction,
 } from "../shared/sigmacraft.js";
+import { derive } from "../shared/stats.js";
 
 const clampMood = (v) => Math.max(NPC_MOOD_MIN, Math.min(NPC_MOOD_MAX, v));
 
@@ -165,6 +166,17 @@ export function advance(ctx) {
       }
     } else if (intent.kind === "rest") {
       const here = tiles[sigmacraft.actorPlaces[token]];
+      // A PLAYTEST hero heals by resting at a safe tile — the partner to the delve's
+      // HP cost (delve → travel home → rest → delve). Gated to isPlaytest so a real
+      // account's run (owned by live-delve) is never touched from the tick.
+      const ch = ctx?.store?.getPlayer?.(token)?.character;
+      const safe = here && (here.danger <= 1 || here.type === "town" || here.type === "city");
+      if (ch?.isPlaytest && ch.run && safe) {
+        const maxHp = derive(ch.run, ch).maxHp;
+        ch.run.hp = Math.min(maxHp, Math.round((ch.run.hp || 0) + maxHp * 0.4));
+        if (ch.run.hp > 0) ch.run.alive = true;
+        ctx?.store?.putPlayer?.(token, ch); // persist the heal
+      }
       emit(`${actorName(token)} rested${here ? ` at ${here.name}` : ""}.`);
     } else if (intent.kind === "talk") {
       emit(`${actorName(token)} traded word with the locals.`);

@@ -38,7 +38,7 @@ function pickTarget(opponents, rnd) {
   const alive = aliveOf(opponents);
   if (!alive.length) return null;
   if (rnd() < 0.7) {
-    return alive.slice().sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))[0];
+    return alive.slice().sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
   }
   return alive[Math.floor(rnd() * alive.length)];
 }
@@ -69,7 +69,7 @@ export function resolvePartyEncounter({ party = [], enemies = [], seed = 1, maxR
     const order = [...aliveOf(P), ...aliveOf(E)].sort(
       (a, b) =>
         (b.sheet.speed || 0) - (a.sheet.speed || 0) ||
-        (a.side < b.side ? -1 : a.side > b.side ? 1 : a.id < b.id ? -1 : 1),
+        (a.side < b.side ? -1 : a.side > b.side ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
     );
     for (const actor of order) {
       if (actor.hp <= 0 || actor.fled) continue; // died/fled earlier this round

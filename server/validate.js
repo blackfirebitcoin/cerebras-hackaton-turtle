@@ -216,7 +216,7 @@ export function vSigmacraftIntent(x) {
   if (kind === "recruit") {
     return { kind, nonce, targetNpcId: vNpcAgentId(o.targetNpcId) }; // co-located npc, re-checked at apply
   }
-  // rest | talk | disband | delve — no target; delve uses the leader's current tile.
+  // rest | talk | disband — no target.
   return { kind, nonce };
 }
 

@@ -68,14 +68,18 @@ export function buildNpcCombatant(npc) {
   };
 }
 
-// A playtest/fresh character has no run yet (freshCharacter doesn't deploy one).
-// Give them a deterministic, combat-ready demo run so the dungeon is balanced and
-// they can hold loot. A genuinely progressed character (level>=3) keeps its own run.
+// Give a PLAYTEST character a deterministic, combat-ready demo run ONCE so the demo
+// dungeon is balanced and they can hold loot. SAFETY: this only ever touches a
+// character explicitly flagged `isPlaytest` — it must NEVER fabricate or replace a
+// real account's run (that would be free leveling + data loss). A real (or already
+// built) run is returned untouched. A fresh demo run starts alive at full HP.
 export function ensureDemoRun(character) {
   if (!character) return null;
-  if (character.run && (character.run.level || 1) >= 3) {
-    if (!Array.isArray(character.run.inventory)) character.run.inventory = [];
-    return character.run;
+  if (!character.isPlaytest) return character.run || null; // hard guard: never touch a real run
+  const existing = character.run;
+  if (existing && (existing.level || 1) >= 3) {
+    if (!Array.isArray(existing.inventory)) existing.inventory = [];
+    return existing;
   }
   const run = freshRun((character.seed >>> 0) || 1, 0, null, character);
   run.level = 8; // a capable demo hero — clears low/mid dungeons, tested by danger
@@ -86,13 +90,19 @@ export function ensureDemoRun(character) {
     if (STAT_KEYS.includes(stat)) run.stats[stat] = (run.stats[stat] || 0) + Math.round((total * w) / wsum);
   }
   if (!Array.isArray(run.inventory)) run.inventory = [];
+  run.alive = true;
+  run.hp = derive(run, character).maxHp; // start at full HP
   character.run = run;
   return run;
 }
 
+// A combatant from a player's run. HONORS the live run: a dead run (alive===false)
+// is not combat-ready (the caller must refuse), and the combatant starts at the
+// run's LIVE hp (clamped) — not maxHp — so HP cost / permadeath carry between delves.
 export function buildPlayerCombatant(character) {
   const run = character?.run || null;
   const sheet = derive(run, character);
+  const liveHp = run && Number.isFinite(run.hp) && run.hp > 0 ? Math.min(run.hp, sheet.maxHp) : sheet.maxHp;
   return {
     id: character?.token || character?.login || "player",
     name: character?.name || character?.login || "Hero",
@@ -100,7 +110,8 @@ export function buildPlayerCombatant(character) {
     isPlayer: true,
     level: run?.level || 1,
     sheet,
-    hp: sheet.maxHp,
+    hp: liveHp,
+    alive: run ? run.alive !== false : true,
   };
 }
 

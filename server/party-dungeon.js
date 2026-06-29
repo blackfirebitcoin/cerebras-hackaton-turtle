@@ -67,8 +67,12 @@ export function rollPartyLoot({ result, builtEnemies, party, level, depth, seed,
     const bossId = bossById.get(kill.enemyId) || null;
     let item = null;
     if (bossId && bossDrops) {
-      item = bossDrops.forgeOrCached(bossId, level);
-      try { bossDrops.warm?.(bossId, level, { killerLevel: level }); } catch { /* off-path */ }
+      try {
+        item = bossDrops.forgeOrCached(bossId, level);
+        bossDrops.warm?.(bossId, level, { killerLevel: level });
+      } catch {
+        item = null; // forge threw → fall through to the normal drop, never hang the request
+      }
     }
     if (!item) item = rollDrop({ rng, level, depth, bias: bossId ? 3 : 1 });
     if (item) drops.push({ memberId: member.id, memberName: member.name, isPlayer: !!member.isPlayer, fromBoss: !!bossId, item });

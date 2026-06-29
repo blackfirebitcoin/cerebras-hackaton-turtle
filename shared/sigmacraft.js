@@ -12,7 +12,10 @@
 export const SIGMACRAFT_SCHEMA = "sigmacraft.world.v2";
 export const SIGMACRAFT_REALM_ID = "sigmacraft_alpha";
 
-export const SIGMACRAFT_INTENT_KINDS = Object.freeze(["move", "rest", "talk", "recruit", "disband", "delve"]);
+// Tick-resolved intents. NOTE: a party delve is NOT an intent — it runs inline via
+// POST /api/sigmacraft/delve (server-authoritative, off the tick), so "delve" is
+// deliberately absent here (it would be a misleading dead branch in advance()).
+export const SIGMACRAFT_INTENT_KINDS = Object.freeze(["move", "rest", "talk", "recruit", "disband"]);
 export const PARTY_MAX_MEMBERS = 4; // recruited NPCs alongside the player leader (party of 5)
 
 export const MAX_SIGMACRAFT_PENDING_INTENTS = 128;
