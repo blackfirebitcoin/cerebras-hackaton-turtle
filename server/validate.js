@@ -37,6 +37,7 @@ import { FACTION_IDS, FACTION_MAX_REP } from "../shared/factions.js";
 import {
   MAX_NPC_AGENT_GOALS,
   MAX_NPC_AGENT_INCIDENTS,
+  MAX_NPC_PROPOSALS_PER_CYCLE,
   NPC_DIALOGUE_MAX,
   NPC_GOAL_TEXT_MAX,
   NPC_SUMMARY_MAX,
@@ -179,16 +180,31 @@ export function vToken(x) {
   return x;
 }
 
+// Generated overworld ids are not in any frozen enum, so the boundary validates
+// SHAPE only; the tick re-checks existence + adjacency before mutating (the
+// contextual gate a stateless validator can't prove).
+const TILE_ID_RE = /^[a-z][a-z0-9_]{1,30}$/; // millbridge, wild_03_07, old_pilgrim_road
+const NPC_AGENT_ID_RE = /^npc_[a-z]+_\d{3}$/; // npc_adventurer_000 …
+export function vTileId(x) {
+  const s = vStr(x, 32); // throws on missing/non-string; scrubs control chars
+  if (!TILE_ID_RE.test(s)) fail("bad tile id");
+  return s;
+}
+export function vNpcAgentId(x) {
+  const s = vStr(x, 32);
+  if (!NPC_AGENT_ID_RE.test(s)) fail("bad npc id");
+  return s;
+}
+
 // Sigmacraft bounded intent (integrate-this trust boundary). Rejects unknown
-// kinds and, for `move`, unknown zone targets — shape only; the route applies
-// the contextual unlock gate with the player's character. `nonce` is bounded and
-// optional (used for idempotent de-dup).
+// kinds and, for `move`, malformed tile ids — shape only; the tick re-checks tile
+// existence + adjacency. `nonce` is bounded + optional (idempotent de-dup).
 export function vSigmacraftIntent(x) {
   const o = asObj(x);
   const kind = vEnum(o.kind, SIGMACRAFT_INTENT_KINDS); // throws on bad kind
   const nonce = vStr(o.nonce, 64, "");
   if (kind === "move") {
-    return { kind, nonce, targetId: vEnum(o.targetId, ZONE_IDS) }; // throws on unknown zone
+    return { kind, nonce, targetId: vTileId(o.targetId) }; // throws on malformed tile id
   }
   return { kind, nonce };
 }
@@ -214,14 +230,14 @@ export function vNpcProposalStep(x) {
   const o = asObj(x);
   const kind = vEnum(o.kind, ["talk", "move"]); // throws on anything else
   return kind === "move"
-    ? { kind, targetId: vEnum(o.targetId, ZONE_IDS) } // throws on unknown zone
-    : { kind, targetId: vEnum(o.targetId, NPC_IDS) }; // talk targets a real npc
+    ? { kind, targetId: vTileId(o.targetId) } // tile move; existence re-checked at apply time
+    : { kind, targetId: vNpcAgentId(o.targetId) }; // talk targets an overworld npc id
 }
 
 export function vNpcProposal(x) {
   const o = asObj(x);
   return {
-    npcId: vEnum(o.npcId, NPC_IDS), // throws on a non-real npc id
+    npcId: vNpcAgentId(o.npcId), // throws on a malformed npc id
     currentGoal: vStr(o.currentGoal, NPC_GOAL_TEXT_MAX, ""),
     dialogueLine: vStr(o.dialogueLine, NPC_DIALOGUE_MAX, ""),
     step: vNpcProposalStep(o.step), // throws → vNpcProposals drops this one
@@ -231,7 +247,7 @@ export function vNpcProposal(x) {
 }
 
 export function vNpcProposals(x) {
-  return vArr(x, vNpcProposal, NPC_IDS.length);
+  return vArr(x, vNpcProposal, MAX_NPC_PROPOSALS_PER_CYCLE);
 }
 
 // ── Game shapes ───────────────────────────────────────────────────────

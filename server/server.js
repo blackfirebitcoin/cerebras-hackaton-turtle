@@ -48,7 +48,7 @@ import {
   weaponCatalogPayload,
 } from "../shared/vampire-survivors.js";
 import { unlockedArts, upgradeCost, WEAPON_PLUS_MAX } from "../shared/weapons.js";
-import { TOWN_ID, unlockedZones, ZONES } from "../shared/zones.js";
+import { ZONES } from "../shared/zones.js";
 import { attachAgentRealm } from "./agent-realm.js";
 import * as arena from "./arena.js";
 import { refreshLastSeen } from "./arena.js";
@@ -443,6 +443,15 @@ app.get(
     });
   }),
 );
+// Static overworld tile graph (fetched once by the playtest UI + agents). The map
+// is deterministic and never mutates, so it is served whole; the per-snapshot
+// worldMap carries the live windowed neighborhood + npcCounts.
+app.get(
+  "/api/sigmacraft/map",
+  guard("GET /api/sigmacraft/map", (_req, res) => {
+    res.json({ ok: true, map: store.getWorldState()?.sigmacraft?.map || null });
+  }),
+);
 // Sigmacraft intent write path (integrate-this PR5). A token-owning player
 // queues ONE bounded, validated intent resolved by the next world tick. All
 // inbound mutation passes the validate.js trust boundary; movement is gated by
@@ -463,13 +472,8 @@ app.post(
       res.status(400).json({ ok: false, error: err?.message || "bad intent" });
       return;
     }
-    if (intent.kind === "move") {
-      const allowed = new Set([TOWN_ID, ...unlockedZones(rec.character).map((z) => z.id)]);
-      if (!allowed.has(intent.targetId)) {
-        res.status(403).json({ ok: false, error: "zone locked" });
-        return;
-      }
-    }
+    // Tile moves are gated at apply time (existence + adjacency in the tick),
+    // not here — the overworld is a free-roam graph, not level-locked zones.
     const world = store.getWorldState();
     const result = sigmacraft.enqueueSigmacraftIntent(world, token, intent);
     store.putWorldState(world);

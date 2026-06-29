@@ -39,6 +39,9 @@ import {
   AGENT_TOKEN_PREFIX,
 } from "../shared/constants.js";
 import { makeRng } from "../shared/rng.js";
+import { projectSigmacraftSnapshot } from "../shared/sigmacraft.js";
+import { enqueueSigmacraftIntent } from "./sigmacraft.js";
+import { vSigmacraftIntent } from "./validate.js";
 
 // ── Character model ────────────────────────────────────────────────────────
 
@@ -243,7 +246,15 @@ export function attachAgentRealm(app, { store, rt, guard }) {
   app.get(
     "/api/agent/world",
     guard("GET /api/agent/world", (_req, res) => {
-      res.json(worldSnapshot());
+      // PR6: agents read the Sigmacraft overworld alongside the combat world. The
+      // anonymous projection (validActions:[]) + the static map is enough for an
+      // agent to plan a move; the agent's own tile comes from GET /api/agent/me.
+      const world = store.getWorldState();
+      res.json({
+        ...worldSnapshot(),
+        sigmacraft: projectSigmacraftSnapshot(world, null, {}),
+        sigmacraftMap: world?.sigmacraft?.map || null,
+      });
     }),
   );
 
@@ -257,7 +268,12 @@ export function attachAgentRealm(app, { store, rt, guard }) {
         return;
       }
       store.putAgent(a.token, a.ch);
-      res.json({ ok: true, character: publicAgent(a.ch) });
+      // PR6: the agent's own Sigmacraft tile (actorPlaces keyed by its agt_ token).
+      res.json({
+        ok: true,
+        character: publicAgent(a.ch),
+        sigmacraft: projectSigmacraftSnapshot(store.getWorldState(), null, { token: a.token }),
+      });
     }),
   );
 
@@ -426,8 +442,31 @@ export function attachAgentRealm(app, { store, rt, guard }) {
           return;
         }
 
+        // PR6: an agent submits a Sigmacraft overworld intent (move/rest/talk).
+        // Reuses the exact player trust boundary + enqueue path; bearer auth +
+        // cooldown are already enforced above. The intent is resolved by the 3s
+        // world tick (tile existence/adjacency re-checked there).
+        case "sigmacraft": {
+          let intent;
+          try {
+            intent = vSigmacraftIntent(req.body?.intent ?? req.body);
+          } catch (err) {
+            res.status(400).json({ error: err?.message || "bad sigmacraft intent" });
+            return;
+          }
+          const world = store.getWorldState();
+          const result = enqueueSigmacraftIntent(world, token, intent);
+          store.putWorldState(world);
+          if (result.status === "rejected") {
+            res.status(409).json({ error: result.reason || "rejected" });
+            return;
+          }
+          finish({ sigmacraft: result }, cooldownObject(ch, AGENT_COOLDOWN.sigmacraft ?? AGENT_COOLDOWN.move));
+          return;
+        }
+
         default:
-          res.status(400).json({ error: `unknown action; valid: move|fight|gather|rest|craft` });
+          res.status(400).json({ error: `unknown action; valid: move|fight|gather|rest|craft|sigmacraft` });
       }
     }),
   );

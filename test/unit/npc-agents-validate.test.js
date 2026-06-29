@@ -1,40 +1,53 @@
-// SIGMA ABYSS — NPC proposal validation (integrate-this PR7 trust boundary).
+// SIGMA ABYSS — NPC proposal validation (PR7 trust boundary, overworld ids).
 // Run: node --test test/unit/npc-agents-validate.test.js
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { vNpcProposal, vNpcProposals } from "../../server/validate.js";
-import { NPC_IDS } from "../../shared/npc-defs.js";
-import { ZONE_IDS } from "../../shared/zones.js";
+import { vNpcProposal, vNpcProposals, vTileId, vNpcAgentId } from "../../server/validate.js";
 
-const realNpc = NPC_IDS[0];
-const realZone = ZONE_IDS.find((z) => z !== "town") || ZONE_IDS[0];
 const base = (over = {}) => ({
-  npcId: realNpc,
-  currentGoal: "tend the warrens",
-  dialogueLine: "State your business, delver.",
-  step: { kind: "talk", targetId: realNpc },
+  npcId: "npc_adventurer_000",
+  currentGoal: "find trouble",
+  dialogueLine: "Trouble on the road? Point me at it.",
+  step: { kind: "talk", targetId: "npc_adventurer_000" },
   memoryPatch: { goals: [{ text: "g" }], recentIncidents: [], summaryPointer: "x" },
   source: "fallback",
   ...over,
 });
 
+describe("vTileId / vNpcAgentId shape validators", () => {
+  test("accept generated ids, reject junk + control chars", () => {
+    assert.equal(vTileId("millbridge"), "millbridge");
+    assert.equal(vTileId("wild_03_07"), "wild_03_07");
+    assert.throws(() => vTileId("Bad Tile!"), /bad tile id/);
+    assert.throws(() => vTileId("Town"), /bad tile id/); // uppercase rejected
+    assert.equal(vNpcAgentId("npc_adventurer_044"), "npc_adventurer_044");
+    assert.throws(() => vNpcAgentId("npc_bogus"), /bad npc id/);
+    assert.throws(() => vNpcAgentId("zzz_000"), /bad npc id/);
+  });
+});
+
 describe("vNpcProposal rejects what the model must not assert", () => {
-  test("unknown npcId throws; vNpcProposals drops it from the batch", () => {
-    assert.throws(() => vNpcProposal(base({ npcId: "nobody" })), /bad enum/);
+  test("malformed npcId throws; vNpcProposals drops it", () => {
+    assert.throws(() => vNpcProposal(base({ npcId: "nobody" })), /bad npc id/);
     assert.deepEqual(vNpcProposals([base({ npcId: "nobody" })]), []);
   });
 
-  test("unknown move zone and bad step kind are rejected", () => {
-    assert.throws(() => vNpcProposal(base({ step: { kind: "move", targetId: "narnia" } })), /bad enum/);
-    assert.throws(() => vNpcProposal(base({ step: { kind: "fly", targetId: realNpc } })), /bad enum/);
+  test("malformed move tile + bad step kind rejected", () => {
+    assert.throws(() => vNpcProposal(base({ step: { kind: "move", targetId: "Bad Tile!" } })), /bad tile id/);
+    assert.throws(() => vNpcProposal(base({ step: { kind: "fly", targetId: "npc_adventurer_000" } })), /bad enum/);
   });
 
-  test("a valid move proposal passes", () => {
-    const clean = vNpcProposal(base({ step: { kind: "move", targetId: realZone } }));
+  test("a valid tile move passes (existence re-checked later, not here)", () => {
+    const clean = vNpcProposal(base({ step: { kind: "move", targetId: "wild_05_05" } }));
     assert.equal(clean.step.kind, "move");
-    assert.equal(clean.step.targetId, realZone);
+    assert.equal(clean.step.targetId, "wild_05_05");
+  });
+
+  test("a 200-proposal batch is not truncated", () => {
+    const batch = Array.from({ length: 200 }, (_, i) => base({ npcId: `npc_adventurer_${String(i % 1000).padStart(3, "0")}` }));
+    assert.equal(vNpcProposals(batch).length, 200);
   });
 });
 
@@ -63,6 +76,6 @@ describe("vNpcProposal bounds + scrubs", () => {
     const zwsp = String.fromCharCode(0x200b);
     const ctrl = String.fromCharCode(0x07);
     const clean = vNpcProposal(base({ dialogueLine: `hi${zwsp}${ctrl}there` }));
-    assert.equal(clean.dialogueLine, "hithere", "zero-width + control chars removed");
+    assert.equal(clean.dialogueLine, "hithere");
   });
 });

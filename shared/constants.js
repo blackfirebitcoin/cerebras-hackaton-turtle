@@ -282,7 +282,7 @@ export const AGENT_HP_PER_LEVEL = 12;
 export const AGENT_SKILLS = ["mining", "woodcutting", "fishing", "alchemy", "oracle"];
 // Cooldown seconds per action kind (move adds AGENT_COOLDOWN_PER_TILE per
 // manhattan tile travelled). Tuneable; agents poll cooldown.expiration.
-export const AGENT_COOLDOWN = { move: 4, fight: 8, gather: 6, rest: 3, craft: 9, oracle: 4 };
+export const AGENT_COOLDOWN = { move: 4, fight: 8, gather: 6, rest: 3, craft: 9, oracle: 4, sigmacraft: 4 };
 export const AGENT_COOLDOWN_PER_TILE = 3;
 export const AGENT_COOLDOWN_MAX_S = 120; // never strand an agent longer than this
 

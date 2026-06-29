@@ -7,7 +7,15 @@
 
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
+
+// Isolate persistence so a stale ./data world.json can't leak in (the overworld
+// snapshot needs the freshly generated map).
+const STORE_DIR = mkdtempSync(join(tmpdir(), "mmo-api-routes-"));
+process.env.MMO_DATA_DIR = STORE_DIR;
 
 // This suite builds its own tiny app from the first-party router and the
 // real store module, then exercises the route contracts over loopback. It
@@ -17,13 +25,13 @@ import { after, before, describe, test } from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "../../server/router.js";
-// Dynamically import store so we can pre-seed minimal state.
-import * as store from "../../server/store.js";
+// store is imported DYNAMICALLY in before() so it reads MMO_DATA_DIR (set above).
+let store;
 import { freshWorld } from "../../server/world-tick.js";
 import { enqueueSigmacraftIntent } from "../../server/sigmacraft.js";
 import { projectSigmacraftSnapshot } from "../../shared/sigmacraft.js";
 import { vSigmacraftIntent } from "../../server/validate.js";
-import { TOWN_ID, unlockedZones } from "../../shared/zones.js";
+import { TOWN_ID } from "../../shared/zones.js";
 
 // We build a minimal app mirroring the routes we want to test, using the
 // same store module. This avoids the WebSocket + supervisor boot.
@@ -38,6 +46,7 @@ function json(res, data, status = 200) {
 }
 
 before(async () => {
+  store = await import("../../server/store.js"); // reads the isolated MMO_DATA_DIR
   const app = express();
   app.use(express.json());
 
@@ -76,7 +85,7 @@ before(async () => {
     const qs = (req.url || "").split("?")[1] || "";
     const token = String(new URLSearchParams(qs).get("token") || "").slice(0, 64);
     const character = token ? store.getPlayer(token)?.character || null : null;
-    json(res, { ok: true, snapshot: projectSigmacraftSnapshot(store.getWorldState(), character) });
+    json(res, { ok: true, snapshot: projectSigmacraftSnapshot(store.getWorldState(), character, { token }) });
   });
 
   app.post("/api/sigmacraft/intent", (req, res) => {
@@ -89,10 +98,7 @@ before(async () => {
     } catch (err) {
       return json(res, { ok: false, error: err?.message || "bad intent" }, 400);
     }
-    if (intent.kind === "move") {
-      const allowed = new Set([TOWN_ID, ...unlockedZones(rec.character).map((z) => z.id)]);
-      if (!allowed.has(intent.targetId)) return json(res, { ok: false, error: "zone locked" }, 403);
-    }
+    // Tile moves are gated at apply time (tick adjacency check), not here.
     const world = store.getWorldState();
     const result = enqueueSigmacraftIntent(world, token, intent);
     store.putWorldState(world);
@@ -106,6 +112,7 @@ before(async () => {
 });
 
 after(async () => {
+  rmSync(STORE_DIR, { recursive: true, force: true });
   await new Promise((resolve, reject) => httpServer.close((e) => (e ? reject(e) : resolve())));
 });
 
@@ -156,14 +163,16 @@ describe("GET /api/feed", () => {
 });
 
 describe("GET /api/sigmacraft/snapshot", () => {
-  test("anonymous returns a snapshot reading a real zone", async () => {
+  test("anonymous returns a snapshot reading the town tile + a windowed map", async () => {
     const res = await fetch(`${baseUrl}/api/sigmacraft/snapshot`);
     assert.equal(res.status, 200);
     const j = await res.json();
     assert.equal(j.ok, true);
     assert.equal(j.snapshot.realmId, "sigmacraft_alpha");
-    assert.equal(j.snapshot.place.id, TOWN_ID);
-    assert.deepEqual(j.snapshot.validActions, []);
+    assert.equal(j.snapshot.place.id, "millbridge"); // the town tile
+    assert.ok(j.snapshot.worldMap.cells.length > 0);
+    // tile-exit move actions are available without a character (free-roam graph)
+    assert.ok(j.snapshot.validActions.some((a) => a.kind === "move"));
   });
 
   test("token-scoped returns valid actions for the player", async () => {

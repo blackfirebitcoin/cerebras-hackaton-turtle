@@ -7,13 +7,13 @@
 // path) so this resolver can trust intent SHAPE; it still re-checks that target
 // zones exist before mutating.
 
-import { ZONE_BY_ID } from "../shared/zones.js";
-import { NPCS } from "../shared/npc-defs.js";
 import {
   MAX_SIGMACRAFT_PENDING_INTENTS,
   MAX_SIGMACRAFT_TICK_INTENTS,
   MAX_SIGMACRAFT_RECENT_EVENTS,
+  MAX_NPC_EFFECTS_PER_TICK,
   createSigmacraftState,
+  seedSigmacraftOverworld,
 } from "../shared/sigmacraft.js";
 
 function ensureState(world) {
@@ -27,6 +27,9 @@ function ensureState(world) {
   if (!s.vcsAccounts || typeof s.vcsAccounts !== "object") s.vcsAccounts = {};
   if (!s.npcAgents || typeof s.npcAgents !== "object") s.npcAgents = {};
   if (!Number.isFinite(s.npcCursor)) s.npcCursor = 0;
+  if (!Number.isFinite(s.npcConsumeCursor)) s.npcConsumeCursor = 0;
+  // Heal/migrate the overworld map + population for pre-overworld worlds.
+  seedSigmacraftOverworld(s, s.realmId || "sigmacraft_alpha");
   return s;
 }
 
@@ -102,49 +105,61 @@ export function advance(ctx) {
     ctx?.store?.pushFeed?.({ kind: "narrative", name: "Sigmacraft", detail: text });
   };
 
+  const tiles = sigmacraft.map?.tiles || {};
   const batch = sigmacraft.pendingIntents.splice(0, MAX_SIGMACRAFT_TICK_INTENTS);
   for (const intent of batch) {
     const token = intent.token;
     if (intent.kind === "move") {
-      const zone = ZONE_BY_ID[intent.targetId];
-      if (!zone) {
+      // Apply-time existence + adjacency re-check (the stateless boundary can't
+      // prove the tile graph): the destination must be an exit of the current tile.
+      const from = sigmacraft.actorPlaces[token] || sigmacraft.map?.townTileId;
+      const fromTile = tiles[from];
+      const dest = tiles[intent.targetId];
+      if (!dest || !fromTile || !fromTile.exits.includes(dest.id)) {
         emit(`${actorName(token)} could not find that road.`);
         continue;
       }
-      sigmacraft.actorPlaces[token] = zone.id;
-      emit(`${actorName(token)} traveled to ${zone.name}.`);
+      sigmacraft.actorPlaces[token] = dest.id;
+      emit(`${actorName(token)} traveled to ${dest.name}.`);
     } else if (intent.kind === "rest") {
-      const zoneId = sigmacraft.actorPlaces[token];
-      const zone = ZONE_BY_ID[zoneId];
-      emit(`${actorName(token)} rested${zone ? ` at ${zone.name}` : ""}.`);
+      const here = tiles[sigmacraft.actorPlaces[token]];
+      emit(`${actorName(token)} rested${here ? ` at ${here.name}` : ""}.`);
     } else if (intent.kind === "talk") {
       emit(`${actorName(token)} traded word with the locals.`);
     }
   }
 
-  // Consume ONE bounded NPC effect per tick (integrate-this PR7). Proposals were
-  // produced + validated OFF the tick by server/sigmacraft-npc-agents.js; here we
-  // only apply a re-checked move OR surface the line. Deterministic (rotate by
-  // tick), bounded (≤1/tick), zero-network; never touches schedulePhase.
+  // Consume up to MAX_NPC_EFFECTS_PER_TICK bounded NPC effects (integrate-this
+  // PR7, scaled for the 200-agent overworld). Proposals were produced + validated
+  // OFF the tick by server/sigmacraft-npc-agents.js; here we only apply a
+  // re-checked tile move OR surface the line. Deterministic (cursor rotation),
+  // bounded, zero-network. Overworld NPCs live in sigmacraft.overworldNpcs.
   const npcIds = Object.keys(sigmacraft.npcAgents)
     .filter((id) => sigmacraft.npcAgents[id]?.plan && !sigmacraft.npcAgents[id].plan.consumed)
     .sort();
   if (npcIds.length) {
-    const id = npcIds[tick % npcIds.length];
-    const agent = sigmacraft.npcAgents[id];
-    const npcName = NPCS[id]?.name || id;
-    if (agent.plan.step?.kind === "move") {
-      const zone = ZONE_BY_ID[agent.plan.step.targetId];
-      if (zone && world.npcs?.[id]) {
-        world.npcs[id].zoneId = zone.id;
-        emit(`${npcName} moved to ${zone.name}.`);
+    // Own cursor (NOT the planner's npcCursor) so the two lanes never collide.
+    let cursor = ((sigmacraft.npcConsumeCursor || 0) % npcIds.length + npcIds.length) % npcIds.length;
+    const applyCount = Math.min(MAX_NPC_EFFECTS_PER_TICK, npcIds.length);
+    for (let i = 0; i < applyCount; i++) {
+      const id = npcIds[(cursor + i) % npcIds.length];
+      const agent = sigmacraft.npcAgents[id];
+      const rec = sigmacraft.overworldNpcs?.[id];
+      const npcName = rec?.name || id;
+      if (agent.plan.step?.kind === "move") {
+        const dest = tiles[agent.plan.step.targetId];
+        const fromTile = tiles[rec?.tileId];
+        if (dest && fromTile && fromTile.exits.includes(dest.id) && rec) {
+          rec.tileId = dest.id;
+          emit(`${npcName} moved to ${dest.name}.`);
+        }
+      } else if (agent.plan.dialogueLine) {
+        appendEvent(sigmacraft, tick, `${npcName}: ${agent.plan.dialogueLine}`);
+        ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine });
       }
-    } else if (agent.plan.dialogueLine) {
-      appendEvent(sigmacraft, tick, `${npcName}: ${agent.plan.dialogueLine}`);
-      ctx?.store?.pushFeed?.({ kind: "npc_dialogue", name: npcName, detail: agent.plan.dialogueLine });
-      if (world.npcs?.[id]) world.npcs[id].lastDialogueAt = tick;
+      agent.plan.consumed = true;
     }
-    agent.plan.consumed = true;
+    sigmacraft.npcConsumeCursor = (cursor + applyCount) % npcIds.length;
   }
   return true;
 }

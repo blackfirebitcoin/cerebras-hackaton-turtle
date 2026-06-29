@@ -1,21 +1,18 @@
-// Gemma NPC proposal lane (integrate-this PR7) — ported from the standalone
-// slice onto the REAL npc-defs.js NPCs. Server-only: runs in its own supervised
-// 15s loop, NEVER in the 3s world-tick critical path, NEVER imported by shared/.
+// Gemma NPC proposal lane (integrate-this PR7), scaled to the 200-agent
+// Sigmacraft overworld. Server-only: runs in its own supervised 15s loop, NEVER
+// in the 3s world-tick critical path, NEVER imported by shared/.
 //
 // The planner PROPOSES bounded controller state (a goal, a line, one move/talk
-// step) for one NPC per cycle; it cannot mutate the world directly. Proposals
-// pass the validate.js trust boundary and are stored under
-// world.sigmacraft.npcAgents[npcId]; a later world tick consumes ONE bounded
-// effect (server/sigmacraft.js). The default planner is a DETERMINISTIC,
-// zero-network fallback (the same always-on path the slice uses when no live
-// model is configured). Live Gemma is env-gated and deferred (see callGemma).
+// step) for a batch of overworld NPCs per cycle; it cannot mutate the world
+// directly. Proposals pass the validate.js trust boundary and are stored under
+// world.sigmacraft.npcAgents[npcId]; a later world tick consumes bounded effects
+// (server/sigmacraft.js). The default planner is a DETERMINISTIC, zero-network
+// fallback. Live Gemma is env-gated and deferred (see callGemma).
 
-import { NPCS, NPC_IDS, npcLine } from "../shared/npc-defs.js";
-import { ZONES, ZONE_BY_ID } from "../shared/zones.js";
 import { NPC_PLAN_REUSE_TICKS, MAX_NPC_AGENT_INCIDENTS, MAX_NPC_AGENT_GOALS } from "../shared/sigmacraft.js";
 import { vNpcProposals } from "./validate.js";
 
-// FNV-1a — deterministic, zero-IO seed from a string (ported from the slice).
+// FNV-1a — deterministic, zero-IO seed from a string.
 function stableHash(str) {
   let h = 0x811c9dc5;
   const s = String(str);
@@ -26,70 +23,65 @@ function stableHash(str) {
   return h >>> 0;
 }
 
-// A tier±1 neighbour of the NPC's zone, biased toward where players are (the
-// "hub pull"), tie-broken deterministically by seed. Falls back to staying put.
-function adjacentZoneId(zoneId, world, seed) {
-  const here = ZONE_BY_ID[zoneId];
-  if (!here) return zoneId;
-  const candidates = ZONES.filter((z) => Math.abs((z.tier ?? 0) - (here.tier ?? 0)) === 1).map((z) => z.id).sort();
-  if (!candidates.length) return zoneId;
+// A real tile-graph neighbour of the NPC's current tile, biased toward where
+// actors are (hub pull), tie-broken deterministically by seed. Falls back to
+// staying put.
+function adjacentTileId(tileId, world, seed) {
+  const tiles = world?.sigmacraft?.map?.tiles || {};
+  const here = tiles[tileId];
+  const exits = (here?.exits || []).filter((id) => tiles[id]);
+  if (!exits.length) return tileId;
   const places = world?.sigmacraft?.actorPlaces || {};
-  const pop = (zid) => Object.values(places).filter((v) => v === zid).length;
-  let best = candidates[0];
+  const pop = (tid) => Object.values(places).filter((v) => v === tid).length;
+  let best = exits[0];
   let bestPop = -1;
-  for (const id of candidates) {
+  for (const id of exits) {
     const n = pop(id);
     if (n > bestPop) { best = id; bestPop = n; }
   }
-  // If nobody is anywhere nearby, rotate deterministically by seed.
-  return bestPop > 0 ? best : candidates[seed % candidates.length];
+  return bestPop > 0 ? best : exits[seed % exits.length];
 }
 
-function dispositionForMood(mood) {
-  const m = Number.isFinite(mood) ? mood : 50;
-  if (m < 30) return "hostile";
-  if (m < 55) return "neutral";
-  if (m < 80) return "friendly";
-  return "ally";
+// Deterministic ambient lines per archetype (no Date/Math.random). <=140 chars.
+const ARCHETYPE_LINES = {
+  adventurer: ["Trouble on the road? Point me at it.", "Renown won't earn itself.", "Stay close — the reaches bite."],
+  crafter: ["Good steel takes patience.", "I need better ore than this.", "A work order won't fill itself."],
+  bandit: ["Mind your purse on this road.", "Patrols are thin tonight.", "This shortcut belongs to us."],
+  merchant: ["Fair prices for honest coin.", "I need guards before the roads close.", "Buy low, friend — the toll's rising."],
+  guard: ["Move along, keep the road clear.", "Bandit sign near the crossing.", "The watch holds — for now."],
+  scout: ["Danger two ridges east.", "I read weather and worse.", "Follow my markers, not the easy path."],
+  mystic: ["The omens are uneasy.", "Old spirits stir near the shrine.", "A riddle for safe passage?"],
+};
+function archetypeLine(rec, seed) {
+  const pool = ARCHETYPE_LINES[rec?.archetype] || ["..."];
+  return pool[seed % pool.length].slice(0, 140);
 }
-
-function goalForPhase(def, phase) {
-  const role = def?.role || "duties";
-  const map = {
-    resting: "Rest and keep an eye on the road",
-    working: `Tend to ${role} work`,
-    wandering: "Wander the reaches, gathering news",
-    trading: "Drive a hard bargain with passing delvers",
-  };
-  return (map[phase] || `See to ${role}`).slice(0, 96);
+function goalFor(rec, seed) {
+  const goals = Array.isArray(rec?.goals) && rec.goals.length ? rec.goals : ["tend the reaches"];
+  return String(goals[seed % goals.length]).slice(0, 96);
 }
 
 // Pure given (npcId, world) — the always-on default. No Date/Math.random.
 export function makeNpcFallbackProposal(npcId, world) {
-  const def = NPCS[npcId];
-  if (!def) return null;
-  const rec = world?.npcs?.[npcId] || {
-    zoneId: def.homeZone,
-    schedulePhase: "resting",
-    moodValue: 50,
-  };
+  const rec = world?.sigmacraft?.overworldNpcs?.[npcId];
+  if (!rec) return null;
   const tick = world?.sigmacraft?.tick || 0;
-  const phase = rec.schedulePhase || "resting";
-  const seed = stableHash(`${npcId}:${tick}:${rec.zoneId}:${phase}`);
-  const wantsMove = phase === "wandering" || seed % 3 === 0;
+  const seed = stableHash(`${npcId}:${tick}:${rec.tileId}`);
+  // Roamers (adventurer/scout/bandit/merchant) wander more than settled folk.
+  const roamer = ["adventurer", "scout", "bandit", "merchant"].includes(rec.archetype);
+  const wantsMove = roamer ? seed % 2 === 0 : seed % 3 === 0;
   const step = wantsMove
-    ? { kind: "move", targetId: adjacentZoneId(rec.zoneId, world, seed) }
+    ? { kind: "move", targetId: adjacentTileId(rec.tileId, world, seed) }
     : { kind: "talk", targetId: npcId };
-  const line = npcLine(npcId, dispositionForMood(rec.moodValue), seed).replace(/\{name\}/g, "traveler");
-  const goal = goalForPhase(def, phase);
+  const goal = goalFor(rec, seed);
   return {
     npcId,
     currentGoal: goal,
-    dialogueLine: line,
+    dialogueLine: archetypeLine(rec, seed),
     step,
     memoryPatch: {
       goals: [{ text: goal }],
-      recentIncidents: [{ summary: `${phase} near ${rec.zoneId}`, tick }],
+      recentIncidents: [{ summary: `near ${rec.tileId}`, tick }],
       summaryPointer: `${npcId}#rolling`,
     },
     source: "fallback",
@@ -120,15 +112,16 @@ function mergePlan(existing, clean, tick) {
   };
 }
 
-// Live Gemma hook — DEFERRED in PR7. Only ever reached when NPC_PLANNER_LIVE=1
-// AND GEMMA_URL is set; default OFF ⇒ never invoked, so tests are socket-free.
+// Live Gemma hook — DEFERRED. Only reached when NPC_PLANNER_LIVE=1 && GEMMA_URL
+// set; default OFF ⇒ never invoked, so tests are socket-free. A live fan-out over
+// 200 agents must add a concurrency cap (follow-up).
 async function callGemma(_npcId, _world, _env) {
   throw new Error("npc live planner not wired (PR7 ships the deterministic fallback)");
 }
 
 export function attachNpcPlanner({ store, env = process.env } = {}) {
   const live = env.NPC_PLANNER_LIVE === "1" && !!env.GEMMA_URL;
-  const maxPerCycle = Math.max(1, Number(env.SIGMACRAFT_NPC_MAX_PER_CYCLE) || 1);
+  const envMax = Number(env.SIGMACRAFT_NPC_MAX_PER_CYCLE);
 
   async function planOne(npcId, world) {
     let proposal = null;
@@ -153,14 +146,18 @@ export function attachNpcPlanner({ store, env = process.env } = {}) {
     if (!Number.isFinite(s.npcCursor)) s.npcCursor = 0;
     const tick = s.tick || 0;
 
-    const ordered = NPC_IDS.slice().sort();
+    const ordered = Object.keys(s.overworldNpcs || {}).sort();
+    if (!ordered.length) return;
+    // Auto-size the batch so the whole population refreshes within the reuse
+    // window (e.g. 200 / 5 = 40 per 15s cycle) rather than ~50 min at 1/cycle.
+    const maxPerCycle = Math.max(1, envMax > 0 ? envMax : Math.ceil(ordered.length / NPC_PLAN_REUSE_TICKS));
     const start = ((s.npcCursor % ordered.length) + ordered.length) % ordered.length;
     let wrote = false;
     let planned = 0;
     for (let i = 0; i < ordered.length && planned < maxPerCycle; i++) {
       const id = ordered[(start + i) % ordered.length];
       const existing = s.npcAgents[id]?.plan;
-      // Skip an NPC still proceeding on a fresh plan (reuse window).
+      // Skip an NPC still proceeding on a fresh, unconsumed plan (reuse window).
       if (existing && tick - (existing.plannedAtTick || 0) < NPC_PLAN_REUSE_TICKS && !existing.consumed) {
         continue;
       }

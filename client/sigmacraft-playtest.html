@@ -36,22 +36,19 @@
   /* world map — grid tiles (vertical-slice style) */
   .map-meta { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
   #map-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; flex: 1; min-height: 0; align-content: start;
+    display: grid; gap: 2px; flex: 1; min-height: 0; align-content: start;
   }
   .map-cell {
-    position: relative; display: flex; flex-direction: column; justify-content: flex-end;
-    aspect-ratio: 1 / .72; min-height: 92px; border: 1px solid rgba(210,224,215,.12); border-radius: 10px;
-    padding: 9px 10px; color: rgba(255,255,255,.82); cursor: not-allowed; overflow: hidden;
-    background: var(--bg-3); transition: transform .1s, filter .1s;
+    position: relative; aspect-ratio: 1; border: 1px solid rgba(0,0,0,.25); border-radius: 3px;
+    cursor: default; overflow: hidden; min-width: 0; transition: filter .1s;
   }
-  .map-cell .nm { font-size: 13px; font-weight: 600; line-height: 1.15; }
-  .map-cell .sub { font-size: 10px; color: rgba(255,255,255,.6); margin-top: 2px; }
-  .map-cell .pin { position: absolute; top: 7px; right: 9px; font-size: 12px; }
-  .map-cell.exit { cursor: pointer; border-color: rgba(127,196,165,.7); box-shadow: inset 0 0 0 1px rgba(127,196,165,.22); }
-  .map-cell.exit:hover { transform: translateY(-2px); filter: brightness(1.12); }
-  .map-cell.current { border-color: rgba(238,243,239,.95); box-shadow: 0 0 0 2px rgba(238,243,239,.18); }
-  .map-cell.locked { opacity: .5; }
-  .map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+  .map-cell .pin { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; color: #fff; text-shadow: 0 1px 2px #000; }
+  .map-cell .cnt { position: absolute; right: 1px; bottom: 0; font-size: 8px; color: rgba(255,255,255,.92); text-shadow: 0 1px 2px #000; line-height: 1; }
+  .map-cell.exit { cursor: pointer; box-shadow: inset 0 0 0 1.5px rgba(127,196,165,.9); }
+  .map-cell.exit:hover { filter: brightness(1.4); }
+  .map-cell.current { box-shadow: 0 0 0 2px #fff; z-index: 2; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+  .map-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
 
   /* small side-scroller pane */
   .scene-pane { position: relative; height: 156px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 6px; }
@@ -91,8 +88,8 @@
     <h2>Realm Map</h2>
     <div class="map-meta" id="map-meta"></div>
     <div id="map-grid"></div>
-    <div class="map-legend">
-      <span>◆ You are here</span><span>Teal border: travel</span><span>Dim: locked</span>
+    <div class="map-legend" id="map-legend">
+      <span>◆ you</span><span>teal edge: travel</span>
     </div>
   </section>
 
@@ -126,12 +123,22 @@
 const $ = (id) => document.getElementById(id);
 let token = null;
 let snap = null;
+let fullMap = null; // static overworld, fetched once
 const nonce = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random())).slice(0, 24);
+
+// tile type → map colour
+const TYPE_COLOR = {
+  town: "#d8a657", city: "#c08a3e", dungeon: "#7a3b2e", ruins: "#5a4a6b",
+  shrine: "#5f7a8c", road: "#6b6452", wilds: "#2c4a36",
+};
 
 async function boot() {
   try {
-    const j = await (await fetch("/api/sigmacraft/playtest", { method: "POST" })).json();
-    token = j.token; snap = j.snapshot;
+    const [pt, mp] = await Promise.all([
+      fetch("/api/sigmacraft/playtest", { method: "POST" }).then(r => r.json()),
+      fetch("/api/sigmacraft/map").then(r => r.json()),
+    ]);
+    token = pt.token; snap = pt.snapshot; fullMap = mp.map;
     $("hdr-who").textContent = `playtest · ${token.slice(-6)}`;
     render();
     setInterval(refresh, 1500);
@@ -165,28 +172,42 @@ const TIER = [
   { sky: ["#241733", "#0d0916"], hill: "#1b1129", ground: "#120a1d", glow: "#9a7fd0" },
   { sky: ["#10172a", "#050811"], hill: "#0b1020", ground: "#070a15", glow: "#6f9fd8" },
 ];
-const tierOf = (z) => Math.min(TIER.length - 1, Math.max(0, z ?? 0));
-const pal = () => TIER[tierOf(snap?.place?.tier)];
+// scene palette indexed by tile danger (1..5)
+const tierOf = (d) => Math.min(TIER.length - 1, Math.max(0, (d ?? 1) - 1));
+const pal = () => TIER[tierOf(snap?.place?.danger)];
 
-// ── world map: grid tiles ───────────────────────────────────────────────────
+// ── world map: the full overworld tile grid ─────────────────────────────────
+let legendDrawn = false;
 function render_map() {
-  const zones = snap?.zones || [];
-  const reach = new Set((snap?.validActions || []).filter(a => a.kind === "move").map(a => a.targetId));
-  $("map-meta").textContent = `${zones.length} zones · ${(snap?.occupants || []).length} here with you`;
+  if (!fullMap?.tiles) return;
   const grid = $("map-grid");
+  grid.style.gridTemplateColumns = `repeat(${fullMap.width}, 1fr)`;
+  const reach = new Set((snap?.validActions || []).filter(a => a.kind === "move").map(a => a.targetId));
+  const curId = snap?.place?.id;
+  // live npcCounts for the windowed neighbourhood (the rest show 0)
+  const counts = {};
+  for (const c of (snap?.worldMap?.cells || [])) counts[c.id] = c.npcCount;
+  const tiles = Object.values(fullMap.tiles).sort((a, b) => a.y - b.y || a.x - b.x);
+  $("map-meta").textContent = `${tiles.length} tiles · ${(snap?.occupants || []).length} here with you`;
   grid.innerHTML = "";
-  for (const z of zones) {
-    const t = TIER[tierOf(z.tier)];
+  for (const t of tiles) {
     const cell = document.createElement("div");
-    const reachable = reach.has(z.id);
-    cell.className = "map-cell" + (z.current ? " current" : "") + (reachable ? " exit" : "") + (!z.unlocked && !z.current ? " locked" : "");
-    cell.style.background = `linear-gradient(160deg, ${t.hill}, ${z.current ? t.glow + "55" : t.ground})`;
-    cell.innerHTML =
-      `<span class="pin">${z.current ? "◆" : (z.unlocked ? "" : "🔒")}</span>` +
-      `<span class="nm">${z.name}</span>` +
-      `<span class="sub">${z.safe ? "safe haven" : "tier " + z.tier}${z.current ? " · here" : (reachable ? " · travel" : "")}</span>`;
-    if (reachable) cell.onclick = () => act({ kind: "move", targetId: z.id });
+    const reachable = reach.has(t.id);
+    const current = t.id === curId;
+    cell.className = "map-cell" + (current ? " current" : "") + (reachable ? " exit" : "");
+    cell.style.background = TYPE_COLOR[t.type] || "#2c4a36";
+    cell.title = `${t.name} · ${t.type} · danger ${t.danger}`;
+    const n = counts[t.id] || 0;
+    cell.innerHTML = (current ? `<span class="pin">◆</span>` : "") + (n > 0 ? `<span class="cnt">${n > 9 ? "9+" : n}</span>` : "");
+    if (reachable) cell.onclick = () => act({ kind: "move", targetId: t.id });
     grid.appendChild(cell);
+  }
+  if (!legendDrawn) {
+    const lg = $("map-legend");
+    for (const [type, col] of Object.entries(TYPE_COLOR)) {
+      lg.insertAdjacentHTML("beforeend", `<span><i class="sw" style="background:${col}"></i>${type}</span>`);
+    }
+    legendDrawn = true;
   }
 }
 
@@ -225,7 +246,8 @@ function render() {
   $("scene-place").textContent = snap?.place?.name || "the wilds";
   $("scene-flavor").textContent = snap?.place?.flavor || "";
   const tb = $("scene-tier");
-  tb.textContent = snap?.place?.safe ? "SAFE HAVEN" : `DANGER · TIER ${snap?.place?.tier ?? 0}`;
+  const ty = snap?.place?.type ? snap.place.type.toUpperCase() : "WILDS";
+  tb.textContent = snap?.place?.safe ? `${ty} · SAFE` : `${ty} · DANGER ${snap?.place?.danger ?? 1}`;
   tb.style.background = snap?.place?.safe ? "rgba(127,196,165,.2)" : "rgba(215,116,116,.2)";
   tb.style.color = snap?.place?.safe ? "var(--teal)" : "var(--danger)";
   render_map();
@@ -272,10 +294,11 @@ function drawScene(ts) {
     }
   }
   ctx.globalAlpha = 1;
-  // static enemy hint (danger zones) — fixed, faint, not "walking with you"
-  if (!snap?.place?.safe) {
+  // static danger hint (fixed, faint, not "walking with you") — scaled by danger
+  const danger = snap?.place?.danger ?? 1;
+  if (danger >= 3) {
     ctx.save(); ctx.globalAlpha = .14; ctx.fillStyle = "#000";
-    for (let i = 0; i < Math.min(2, (snap?.place?.enemies || []).length); i++) {
+    for (let i = 0; i < Math.min(2, danger - 2); i++) {
       const ex = W * (0.62 + i * 0.16);
       ctx.beginPath(); ctx.ellipse(ex, groundY - 6, 7, 12, 0, 0, 7); ctx.fill();
     }

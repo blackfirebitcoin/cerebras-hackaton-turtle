@@ -16,7 +16,7 @@
 // back, and broadcasts a `worldPulse` for the overlay.
 
 import { PLAYER_ACTIVE_MS, WORLD_TICK_MS } from "../shared/constants.js";
-import { createSigmacraftState } from "../shared/sigmacraft.js";
+import { createSigmacraftState, seedSigmacraftOverworld } from "../shared/sigmacraft.js";
 import { FACTION_IDS, FACTIONS, factionZoneMod, pickFactionRaider } from "../shared/factions.js";
 import { NPC_IDS, NPCS, npcSchedulePhase } from "../shared/npc-defs.js";
 import { rollCrisis, rollWorldEvent } from "../shared/storyteller.js";
@@ -114,9 +114,9 @@ export function freshWorld(seed = DEFAULT_WORLD_SEED) {
     },
     graves: [],
     lastTickAt: 0,
-    // Sigmacraft fantasy projection layer (integrate-this). Bounded pointers and
-    // queues only — resolved by the fast sub-advancer in server/sigmacraft.js.
-    sigmacraft: createSigmacraftState(),
+    // Sigmacraft fantasy overworld layer (integrate-this). The 140-tile map +
+    // 200-agent population are generated deterministically from the world seed.
+    sigmacraft: seedSigmacraftOverworld(createSigmacraftState(), String(seed)),
   };
 }
 
