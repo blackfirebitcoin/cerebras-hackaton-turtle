@@ -21,19 +21,26 @@ const unavailableLlm = () => {
 const firstPlan = (w) => Object.values(w.sigmacraft.npcAgents).find((a) => a?.plan)?.plan;
 
 describe("NPC planner — live Gemma via the seam", () => {
-  test("maps a model reply into a validated 'gemma' proposal", async () => {
+  test("maps a model AGENDA reply into a validated 'gemma' plan", async () => {
     const w = freshWorld();
+    const town = w.sigmacraft.map.townTileId;
     const planner = attachNpcPlanner({
       store: fakeStore(w),
       env: { NPC_PLANNER_LIVE: "1", SIGMACRAFT_NPC_MAX_PER_CYCLE: "3" },
-      llm: okLlm({ goal: "scout the marches", line: "Stay sharp.", action: "talk" }),
+      llm: okLlm({
+        goal: "scout the marches",
+        line: "Stay sharp.",
+        agenda: [{ action: "rest", target: town }, { action: "talk" }],
+      }),
     });
     await planner.plan();
     const plan = firstPlan(w);
     assert.ok(plan, "a plan was written");
     assert.equal(plan.source, "gemma");
-    assert.equal(plan.currentGoal, "scout the marches");
-    assert.equal(plan.step.kind, "talk");
+    assert.equal(plan.goal, "scout the marches");
+    assert.equal(plan.cursor, 0);
+    assert.equal(plan.agenda[0].kind, "rest");
+    assert.equal(plan.agenda[0].targetTileId, town);
   });
 
   test("a model failure hard-falls-back to the deterministic planner", async () => {

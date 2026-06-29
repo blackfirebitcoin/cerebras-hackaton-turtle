@@ -15,26 +15,26 @@ function fakeStore(world) {
 }
 const anyNpcId = (w) => Object.keys(w.sigmacraft.overworldNpcs).sort()[0];
 
-describe("deterministic fallback proposal", () => {
-  test("every overworld NPC's fallback survives the validator unchanged in shape", () => {
+import { NPC_ACTION_KINDS } from "../../shared/sigmacraft.js";
+
+describe("deterministic fallback agenda", () => {
+  test("every overworld NPC's fallback agenda survives the validator + is grounded", () => {
     const w = freshWorld();
-    let moves = 0;
     for (const id of Object.keys(w.sigmacraft.overworldNpcs)) {
       const p = makeNpcFallbackProposal(id, w);
       const clean = vNpcProposal(p);
       assert.equal(clean.npcId, id);
-      assert.ok(["talk", "move"].includes(clean.step.kind));
+      assert.ok(Array.isArray(clean.agenda) && clean.agenda.length > 0, "has a non-empty agenda");
+      assert.ok(clean.agenda.length <= 5, "agenda bounded");
+      for (const obj of clean.agenda) {
+        assert.ok(NPC_ACTION_KINDS.includes(obj.kind), `known action kind: ${obj.kind}`);
+        if (obj.targetTileId) {
+          assert.ok(w.sigmacraft.map.tiles[obj.targetTileId], "objective targets a REAL tile");
+        }
+      }
       assert.ok(clean.dialogueLine.length <= 140);
       assert.ok(clean.currentGoal.length <= 96);
-      if (clean.step.kind === "move") {
-        // move targets are real adjacent tiles
-        assert.ok(w.sigmacraft.map.tiles[clean.step.targetId], "move target is a real tile");
-        const here = w.sigmacraft.overworldNpcs[id].tileId;
-        assert.ok(w.sigmacraft.map.tiles[here].exits.includes(clean.step.targetId), "tile is adjacent");
-        moves += 1;
-      }
     }
-    assert.ok(moves > 0, "some NPCs choose to move");
   });
 
   test("is deterministic for the same (npc, tick, tile)", () => {

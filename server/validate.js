@@ -40,9 +40,11 @@ import {
   DIRECTOR_TEXT_MAX,
   DIRECTOR_TITLE_MAX,
   MAX_DIRECTOR_PROPOSALS_PER_CYCLE,
+  MAX_NPC_AGENDA_STEPS,
   MAX_NPC_AGENT_GOALS,
   MAX_NPC_AGENT_INCIDENTS,
   MAX_NPC_PROPOSALS_PER_CYCLE,
+  NPC_ACTION_KINDS,
   NPC_DIALOGUE_MAX,
   NPC_GOAL_TEXT_MAX,
   NPC_SUMMARY_MAX,
@@ -231,12 +233,25 @@ export function vNpcMemory(x) {
   };
 }
 
-export function vNpcProposalStep(x) {
+// One STRATEGIC agenda objective: an action kind + an optional destination tile.
+// `targetTileId` is shape-validated only (vTileId); existence + reachability are
+// re-checked on the tick when the NPC actually walks the agenda. The tick derives
+// the concrete per-tick primitive from this (deriveNextStep) — the model never
+// hands us a raw move, so it cannot teleport.
+export function vNpcAgendaStep(x) {
   const o = asObj(x);
-  const kind = vEnum(o.kind, ["talk", "move"]); // throws on anything else
-  return kind === "move"
-    ? { kind, targetId: vTileId(o.targetId) } // tile move; existence re-checked at apply time
-    : { kind, targetId: vNpcAgentId(o.targetId) }; // talk targets an overworld npc id
+  const kind = vEnum(o.kind, NPC_ACTION_KINDS); // move|talk|gather|fight|rest|craft
+  const step = { kind };
+  if (o.targetTileId !== undefined && o.targetTileId !== null && o.targetTileId !== "") {
+    step.targetTileId = vTileId(o.targetTileId); // throws → this objective is dropped
+  }
+  return step;
+}
+
+// The strategic agenda: an ordered, bounded list of objectives. vArr DROPS malformed
+// objectives (keeping the valid ones) and caps the length.
+export function vNpcAgenda(x) {
+  return vArr(x, vNpcAgendaStep, MAX_NPC_AGENDA_STEPS);
 }
 
 export function vNpcProposal(x) {
@@ -245,7 +260,7 @@ export function vNpcProposal(x) {
     npcId: vNpcAgentId(o.npcId), // throws on a malformed npc id
     currentGoal: vStr(o.currentGoal, NPC_GOAL_TEXT_MAX, ""),
     dialogueLine: vStr(o.dialogueLine, NPC_DIALOGUE_MAX, ""),
-    step: vNpcProposalStep(o.step), // throws → vNpcProposals drops this one
+    agenda: vNpcAgenda(o.agenda), // high-level plan; tick cascades it into primitives
     memoryPatch: vNpcMemory(o.memoryPatch),
     source: vEnum(o.source, ["fallback", "gemma"], "fallback"),
   };

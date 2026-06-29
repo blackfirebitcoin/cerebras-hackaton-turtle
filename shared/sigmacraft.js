@@ -36,6 +36,91 @@ export const MAX_NPC_PROPOSALS_PER_CYCLE = 256; // vNpcProposals batch cap (>= p
 export const WORLD_MAP_WINDOW = 2; // Chebyshev radius of the windowed snapshot map
 export const MAX_WORLDMAP_CELLS = 64;
 
+// ── Agentic NPC planning (PR-C): two-layer plans ──────────────────────────────
+// STRATEGIC layer (off-tick): an `agenda` = ordered objectives, each a real action
+// at a real tile. TACTICAL layer (on-tick): one concrete primitive per tick, walked
+// toward the current objective and performed when the NPC arrives. The full action
+// vocabulary — every action has a tile precondition + a bounded effect on REAL npc
+// state (tileId / supplies / moodValue), never player loot/XP/death/market.
+export const NPC_ACTION_KINDS = Object.freeze(["move", "talk", "gather", "fight", "rest", "craft"]);
+export const NPC_TERMINAL_ACTIONS = Object.freeze(["talk", "gather", "fight", "rest", "craft"]);
+export const MAX_NPC_AGENDA_STEPS = 5; // strategic objectives per agenda
+export const NPC_SUPPLY_CAP = 5; // gathered-supply tally ceiling (bounded npc state)
+export const NPC_MOOD_MIN = 0;
+export const NPC_MOOD_MAX = 100;
+export const NPC_PATHFIND_NODE_CAP = 512; // BFS guard (140 tiles ⇒ never hit)
+
+// Tile preconditions for each terminal action — the "grounding" rule. PURE.
+export function tileSupportsAction(tile, kind) {
+  if (!tile) return false;
+  const type = tile.type;
+  const danger = tile.danger || 0;
+  switch (kind) {
+    case "gather":
+      return type === "wilds" || type === "dungeon" || type === "ruins";
+    case "fight":
+      return type === "dungeon" || danger >= 3;
+    case "rest":
+      return type === "town" || type === "city" || danger <= 1;
+    case "craft":
+      return type === "town" || type === "city";
+    case "talk":
+      return true; // talking is always available
+    default:
+      return false;
+  }
+}
+
+// Deterministic BFS next-hop from `fromId` toward `toId` over the tile exits graph.
+// Returns the first tile on a shortest path, or `fromId` when already there /
+// unreachable. PURE (exits are ordered ⇒ stable), bounded by NPC_PATHFIND_NODE_CAP.
+export function nextHopToward(fromId, toId, tiles) {
+  if (!tiles || !tiles[fromId] || !tiles[toId] || fromId === toId) return fromId;
+  const prev = { [fromId]: null };
+  const queue = [fromId];
+  let visited = 0;
+  let found = false;
+  while (queue.length && visited < NPC_PATHFIND_NODE_CAP) {
+    const cur = queue.shift();
+    visited += 1;
+    if (cur === toId) { found = true; break; }
+    for (const nb of tiles[cur]?.exits || []) {
+      if (tiles[nb] && !(nb in prev)) {
+        prev[nb] = cur;
+        queue.push(nb);
+      }
+    }
+  }
+  if (!found) return fromId;
+  let node = toId;
+  while (prev[node] !== fromId && prev[node] != null) node = prev[node];
+  return prev[node] === fromId ? node : fromId;
+}
+
+// THE CASCADE. Given an NPC's current tile + its strategic agenda objective, return
+// the concrete tactical primitive for THIS tick and whether the objective is now
+// complete (so the caller advances the cursor). PURE + total.
+//   { kind: "move"|"gather"|"fight"|"rest"|"craft"|"talk"|"noop", targetId?, objectiveComplete }
+export function deriveNextStep(npc, agenda, cursor, tiles) {
+  const objective = Array.isArray(agenda) ? agenda[cursor] : null;
+  if (!objective) return { kind: "noop", objectiveComplete: true };
+  const here = npc?.tileId;
+  const target = objective.targetTileId;
+  // Travel phase: still walking toward the objective's tile.
+  if (target && target !== here && tiles?.[target]) {
+    const hop = nextHopToward(here, target, tiles);
+    if (hop && hop !== here) return { kind: "move", targetId: hop, objectiveComplete: false };
+    return { kind: "noop", objectiveComplete: true }; // unreachable ⇒ skip objective
+  }
+  // Arrived (or no target). A plain "move" objective is done on arrival.
+  if (objective.kind === "move") return { kind: "noop", objectiveComplete: true };
+  // Terminal action — perform it iff the current tile supports it, else degrade to talk.
+  if (tileSupportsAction(tiles?.[here], objective.kind)) {
+    return { kind: objective.kind, objectiveComplete: true };
+  }
+  return { kind: "talk", objectiveComplete: true };
+}
+
 // Director / game-master lane (PR9). ONE world-level brain proposes bounded public
 // beats off-tick; the tick consumes them into the objective + feed. It owns no
 // authority (no loot/XP/death/market) — only narrative + the public objective.
@@ -239,6 +324,7 @@ function createNpcAgent(archetype, index, globalIndex, tiles, seed) {
     persona,
     tileId: npcTileId(globalIndex, archetype, tiles, seed),
     moodValue: 50,
+    supplies: 0, // gathered-material tally; gather++ / craft-- (bounded NPC_SUPPLY_CAP)
     plannerCadenceTicks: 4 + (globalIndex % 8),
     goals,
     memory: {
@@ -352,14 +438,18 @@ function projectOccupants(sigmacraft, currentTileId, selfToken) {
   for (const npc of Object.values(sigmacraft?.overworldNpcs || {})) {
     if (npc.tileId !== currentTileId) continue;
     const plan = sigmacraft?.npcAgents?.[npc.id]?.plan || null;
+    const objective = plan?.agenda && Array.isArray(plan.agenda) ? plan.agenda[plan.cursor || 0] : null;
     out.push({
       id: npc.id,
       kind: "npc",
       name: npc.name,
       archetype: npc.archetypeLabel || npc.archetype || null,
       faction: npc.faction || null,
-      goal: plan?.currentGoal || null,
+      goal: plan?.goal || null, // strategic intent
+      doing: objective?.kind || null, // current tactical action (the cascade)
       lastLine: plan?.dialogueLine || null,
+      supplies: npc.supplies ?? 0,
+      mood: npc.moodValue ?? 50,
     });
     if (out.length >= 16) break;
   }
