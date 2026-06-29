@@ -153,6 +153,16 @@ export function advance(ctx) {
       }
       sigmacraft.actorPlaces[token] = dest.id;
       emit(`${actorName(token)} traveled to ${dest.name}.`);
+      // The party travels together: recruited members (partyLocked, so the planner
+      // leaves them be) follow the leader to the new tile each hop.
+      const party = sigmacraft.parties[token];
+      if (party && party.members.length) {
+        for (const m of party.members) {
+          const npc = sigmacraft.overworldNpcs?.[m.npcId];
+          if (npc) npc.tileId = dest.id;
+        }
+        if (party.status === "forming") party.status = "traveling";
+      }
     } else if (intent.kind === "rest") {
       const here = tiles[sigmacraft.actorPlaces[token]];
       emit(`${actorName(token)} rested${here ? ` at ${here.name}` : ""}.`);
