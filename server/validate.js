@@ -35,6 +35,11 @@ import { REAGENT_CODES } from "../shared/crafting.js";
 import { DISEASE_IDS } from "../shared/diseases.js";
 import { FACTION_IDS, FACTION_MAX_REP } from "../shared/factions.js";
 import {
+  DIRECTOR_ID_MAX,
+  DIRECTOR_KINDS,
+  DIRECTOR_TEXT_MAX,
+  DIRECTOR_TITLE_MAX,
+  MAX_DIRECTOR_PROPOSALS_PER_CYCLE,
   MAX_NPC_AGENT_GOALS,
   MAX_NPC_AGENT_INCIDENTS,
   MAX_NPC_PROPOSALS_PER_CYCLE,
@@ -248,6 +253,36 @@ export function vNpcProposal(x) {
 
 export function vNpcProposals(x) {
   return vArr(x, vNpcProposal, MAX_NPC_PROPOSALS_PER_CYCLE);
+}
+
+// Director / game-master proposal (integrate-this PR9) — the trust boundary for the
+// off-tick GM brain. The Director owns NO authority: a proposal may set narrative
+// text + (for quest_beat) the PUBLIC objective, nothing else (no loot/XP/death/
+// market). vEnum hard-constrains the kind; vStr scrubs + caps every string; an
+// optional targetTileId is shape-checked (tick re-checks existence). A malformed
+// proposal throws → vDirectorProposals DROPS it rather than failing the batch.
+export function vDirectorProposal(x) {
+  const o = asObj(x);
+  const kind = vEnum(o.kind, DIRECTOR_KINDS); // throws on anything else
+  const proposal = {
+    kind,
+    id: vStr(o.id, DIRECTOR_ID_MAX, ""),
+    title: vStr(o.title, DIRECTOR_TITLE_MAX, ""),
+    text: vStr(o.text, DIRECTOR_TEXT_MAX, ""),
+    source: vEnum(o.source, ["fallback", "gemma"], "fallback"),
+  };
+  if (o.targetTileId !== undefined && o.targetTileId !== null && o.targetTileId !== "") {
+    proposal.targetTileId = vTileId(o.targetTileId); // shape only; existence re-checked at apply
+  }
+  if (kind === "quest_beat") {
+    proposal.questId = vStr(o.questId, DIRECTOR_ID_MAX, "");
+    proposal.stageId = vStr(o.stageId, DIRECTOR_ID_MAX, "");
+  }
+  return proposal;
+}
+
+export function vDirectorProposals(x) {
+  return vArr(x, vDirectorProposal, MAX_DIRECTOR_PROPOSALS_PER_CYCLE);
 }
 
 // ── Game shapes ───────────────────────────────────────────────────────
