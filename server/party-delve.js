@@ -95,7 +95,15 @@ export function runPartyDelve({ world, store, token, character, bossDrops = null
     drops: loot.drops.map((d) => ({ to: d.memberName, item: d.item?.name || "loot", rarity: d.item?.rarity, fromBoss: d.fromBoss })),
     at: s.tick || 0,
   };
-  if (result.outcome === "victory") cooldowns[tileId] = s.tick || 0; // disband-proof ledger
+  if (result.outcome === "victory") {
+    const nowTick = s.tick || 0;
+    // Prune expired cooldowns for this token so the ledger stays bounded (the
+    // reviewer's non-blocking note — no unbounded world.json growth).
+    for (const tid of Object.keys(cooldowns)) {
+      if (nowTick - cooldowns[tid] >= DELVE_COOLDOWN_TICKS) delete cooldowns[tid];
+    }
+    cooldowns[tileId] = nowTick; // disband-proof ledger
+  }
   party.status = result.outcome === "victory" ? "done" : "forming";
   store?.pushFeed?.({ kind: "narrative", name: "Dungeon", detail: `Party ${result.outcome} in ${tile.name} (${result.kills.length} slain, ${kept} loot to the leader).` });
 
