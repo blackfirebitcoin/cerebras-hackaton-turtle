@@ -244,11 +244,18 @@ export function playerCount() {
   return players.size;
 }
 
-export function pushFeed(entry) {
+// Append a feed entry. `persist:false` adds it to the live in-memory ring (so /api/feed
+// and WS viewers still see it) WITHOUT raising the disk-persist signal — used for
+// ambient, regenerable Sigmacraft narration (NPC/director flavor). That keeps a
+// player-less server at a true zero-write steady state (the players.json+feed.json
+// analogue of the world.json idle-quiescence guard / PSU power safety). Ephemeral
+// entries still ride to disk opportunistically the next time a real event dirties
+// the store; they are simply never the CAUSE of a write.
+export function pushFeed(entry, { persist = true } = {}) {
   const e = { ...entry, at: Date.now() };
   feed.unshift(e);
   if (feed.length > FEED_MAX) feed.length = FEED_MAX;
-  dirty = true;
+  if (persist) dirty = true;
   return e;
 }
 
